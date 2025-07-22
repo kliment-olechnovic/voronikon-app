@@ -1,0 +1,79 @@
+#!/bin/bash
+
+export LANG=C
+export LC_ALL=C
+
+SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+INPUT="$1"
+SELECTION="$2"
+OUTPUT="$3"
+
+if [ -z "$INPUT" ]
+then
+	echo >&2 "Error: input file not provided"
+	exit 1
+fi
+
+if [ ! -s "$INPUT" ]
+then
+	echo >&2 "Error: input file '$INPUT' does not exist"
+	exit 1
+fi
+
+if [ -z "$SELECTION" ]
+then
+	SELECTION="[]"
+fi
+
+if [ -z "$OUTPUT" ]
+then
+	echo >&2 "Error: output file not provided"
+	exit 1
+fi
+
+readonly TMPLDIR=$(mktemp -d)
+trap "rm -r $TMPLDIR" EXIT
+
+cat "$INPUT" > "${TMPLDIR}/atoms.pdb"
+
+cd "$TMPLDIR"
+
+{
+cat << EOF
+voronota_setup_defaults("-no-load-voromqa-potentials", "-no-load-more-atom-types", "-no-load-mock-voromqa-potential");
+voronota_import("-file", "atoms.pdb", "-title", "atoms", "-include-heteroatoms");
+voronota_delete_tags_of_atoms("-tags", "het");
+voronota_restrict_atoms("-use", "$SELECTION");
+voronota_export_atoms("-file", "atoms.pa");
+EOF
+} \
+| ${SCRIPTDIR}/voronota-js --no-setup-defaults
+
+if [ ! -s "atoms.pa" ]
+then
+	echo >&2 "Error: failed to read atoms from '${INPUT}' with selection '${SELECTION}'"
+	exit 1
+fi
+
+{
+cat atoms.pa | wc -l
+echo
+cat atoms.pa | awk '{print $6 " " $2 " " $3 " " $4}' | sed 's/^el=//'
+} \
+> atoms.xyz
+
+obabel atoms.xyz -O atoms.sdf &> ./obabel.log
+
+if [ ! -s "atoms.sdf" ]
+then
+	echo >&2 "Error: failed to covert '${INPUT}' with selection '${SELECTION}' to SDF"
+	exit 1
+fi
+
+cd - &> /dev/null
+
+mkdir -p "$(dirname $OUTPUT)"
+
+cat "${TMPLDIR}/atoms.sdf" > "$OUTPUT"
+

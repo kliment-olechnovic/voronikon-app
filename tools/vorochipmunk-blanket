@@ -1,0 +1,595 @@
+#!/bin/bash
+
+function print_help_and_exit
+{
+cat >&2 << 'EOF'
+
+'vorochipmunk' script calculates inter-chain interfaces area statistical pseudo-energy for protein complexes.
+
+Options:
+    --input | -i                  string  *  input file path or '_list' to read file paths from stdin
+    --restrict-input              string     query to restrict input atoms, default is '[]'
+    --subselect-contacts          string     query to subselect inter-chain contacts, default is '[]''
+    --output-table-file           string     output table file path, default is '_stdout' to print to stdout
+    --processors                  number     maximum number of processors to run in parallel, default is 1
+    --stdin-file                  string     input file path to replace stdin
+    --run-faspr                   string     path to FASPR binary to rebuild side-chains
+    --input-is-script                        flag to treat input file as vs script
+    --as-assembly                            flag to treat input file as biological assembly
+    --detailed                               flag to enable detailed output
+    --help | -h                              flag to display help message and exit
+
+Standard output:
+    space-separated table of scores
+    
+Examples:
+
+    vorochipmunk --input ./model.pdb
+    
+    vorochipmunk --input ./model.pdb --subselect-contacts '[-a1 [-chain A,C] -a2 [-chain D,F]]'
+    
+    ls *.pdb | vorochipmunk --input _list --processors 8 | column -t
+
+EOF
+exit 1
+}
+
+export LANG=C
+export LC_ALL=C
+
+function cat_stdin
+{
+	STDIN_SOURCE="$1"
+	if [ "$STDIN_SOURCE" == "_stream" ]
+	then
+		cat
+	else
+		cat "$STDIN_SOURCE"
+	fi
+}
+
+function get_input_basename
+{
+	INPUT_MAIN_BASENAME="$(basename $1)"
+	INPUT_STDIN_FILE="$2"
+	if [ "$INPUT_MAIN_BASENAME" == "_stream" ] || [ "$INPUT_MAIN_BASENAME" == "_list" ]
+	then
+		if [ "$INPUT_STDIN_FILE" != "_stream" ] 
+		then
+			basename "$INPUT_STDIN_FILE"
+			return 0
+		fi
+	fi
+	echo "$INPUT_MAIN_BASENAME"
+}
+
+function substitute_id_in_filename
+{
+	SUBSTITUTE_BASENAME="$(basename "$1")"
+	SUBSTITUTE_TEMPLATE="$2"
+	
+	echo "$SUBSTITUTE_TEMPLATE" \
+	| sed "s|-BASENAME-|${SUBSTITUTE_BASENAME}|"
+}
+
+################################################################################
+
+SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+readonly ZEROARG=$0
+ALLARGS=("$@")
+
+if [ -z "$1" ]
+then
+	print_help_and_exit
+fi
+
+export PATH="${SCRIPTDIR}:${PATH}"
+
+command -v voronota-js &> /dev/null || { echo >&2 "Error: 'voronota-js' executable not in binaries path"; exit 1; }
+
+AKBPSLAYEREDLIB="${SCRIPTDIR}/akbps_layered_lib"
+AKBPSLAYEREDLIBWEIGHTS=""
+INFILE=""
+RESTRICT_INPUT="[]"
+SUBSELECT_CONTACTS="[]"
+OUTPUT_TABLE_FILE="_stdout"
+MAX_PROCESSORS="1"
+STDIN_FILE="_stream"
+RUN_FASPR=""
+BLANKET_TYPES_FILE=""
+INPUT_IS_SCRIPT="false"
+AS_ASSEMBLY="false"
+DETAILED_MODE="false"
+HELP_MODE="false"
+
+while [[ $# > 0 ]]
+do
+	OPTION="$1"
+	OPTARG="$2"
+	shift
+	case $OPTION in
+	--akbps-layered-lib)
+		AKBPSLAYEREDLIB="$OPTARG"
+		shift
+		;;
+	--akbps-layered-lib-weights)
+		AKBPSLAYEREDLIBWEIGHTS="$OPTARG"
+		shift
+		;;
+	-i|--input)
+		INFILE="$OPTARG"
+		shift
+		;;
+	--restrict-input)
+		RESTRICT_INPUT="$OPTARG"
+		shift
+		;;
+	--subselect-contacts)
+		SUBSELECT_CONTACTS="$OPTARG"
+		shift
+		;;
+	--output-table-file)
+		OUTPUT_TABLE_FILE="$OPTARG"
+		shift
+		;;
+	--processors)
+		MAX_PROCESSORS="$OPTARG"
+		shift
+		;;
+	--stdin-file)
+		STDIN_FILE="$OPTARG"
+		shift
+		;;
+	--run-faspr)
+		RUN_FASPR="$OPTARG"
+		shift
+		;;
+	--blanket-types-file)
+		BLANKET_TYPES_FILE="$OPTARG"
+		shift
+		;;
+	--input-is-script)
+		INPUT_IS_SCRIPT="true"
+		;;
+	--as-assembly)
+		AS_ASSEMBLY="true"
+		;;
+	--detailed)
+		DETAILED_MODE="true"
+		;;
+	-h|--help)
+		HELP_MODE="true"
+		;;
+	*)
+		echo >&2 "Error: invalid command line option '$OPTION'"
+		exit 1
+		;;
+	esac
+done
+
+if [ "$HELP_MODE" == "true" ]
+then
+	print_help_and_exit
+fi
+
+if [ "$AKBPSLAYEREDLIBWEIGHTS" == "vorochipmunk" ]
+then
+	AKBPSLAYEREDLIBWEIGHTS="${SCRIPTDIR}/akbps_layered_lib_weights_a"
+fi
+
+if [ "$AKBPSLAYEREDLIBWEIGHTS" == "vorochipmunk_en" ]
+then
+	AKBPSLAYEREDLIBWEIGHTS="${SCRIPTDIR}/akbps_layered_lib_weights_b"
+fi
+
+if [ -z "$AKBPSLAYEREDLIB" ]
+then
+	echo >&2 "Error: input area KBPs file not provided"
+	exit 1
+fi
+
+if [ ! -s "$AKBPSLAYEREDLIB" ]
+then
+	echo >&2 "Error: input area KBPs file '$AKBPSLAYEREDLIB' does not exist"
+	exit 1
+fi
+
+if [ -n "$AKBPSLAYEREDLIBWEIGHTS" ] && [ ! -s "$AKBPSLAYEREDLIBWEIGHTS" ]
+then
+	echo >&2 "Error: input area KBPs weights file '$AKBPSLAYEREDLIBWEIGHTS' does not exist"
+	exit 1
+fi
+
+if [ -z "$INFILE" ]
+then
+	echo >&2 "Error: input file not provided"
+	exit 1
+fi
+
+if [[ $INFILE == "_scriptline_"* ]]
+then
+	readonly TMPLDIR=$(mktemp -d)
+	trap "rm -r $TMPLDIR" EXIT
+	
+	echo "$INFILE" | sed 's/^_scriptline_//' | sed 's/_-_/ /g' \
+	> "$TMPLDIR/_extracted_script_line"
+	
+	if [ ! -s "$TMPLDIR/_extracted_script_line" ]
+	then
+		echo >&2 "Error: no input string line extracted"
+		exit 1
+	fi
+	
+	"$ZEROARG" "${ALLARGS[@]}" --input-is-script --input "$TMPLDIR/_extracted_script_line"
+	
+	exit 0
+fi
+
+if [ "$INFILE" != "_list" ] && [ "$INFILE" != "_stream" ] && [ ! -s "$INFILE" ]
+then
+	echo >&2 "Error: input file '$INFILE' does not exist"
+	exit 1
+fi
+
+if [ "$STDIN_FILE" != "_stream" ] && [ ! -s "$STDIN_FILE" ]
+then
+	echo >&2 "Error: stdin replacement file '$STDIN_FILE' does not exist"
+	exit 1
+fi
+
+if [ -n "$RUN_FASPR" ]
+then
+	if [ ! -s "$RUN_FASPR" ]
+	then
+		echo >&2 "Error: FASPR data file '$RUN_FASPR' does not exist"
+		exit 1
+	fi
+	
+	if [[ $RUN_FASPR != *".bin" ]]
+	then
+		echo >&2 "Error: FASPR data file '$RUN_FASPR' is not valid"
+		exit 1
+	fi
+fi
+
+if [ "$INFILE" == "_stream" ]
+then
+	readonly TMPLDIR=$(mktemp -d)
+	trap "rm -r $TMPLDIR" EXIT
+	
+	cat_stdin "$STDIN_FILE" > "$TMPLDIR/_stream"
+	
+	if [ ! -s "$TMPLDIR/_stream" ]
+	then
+		echo >&2 "Error: no stdin data"
+		exit 1
+	fi
+	
+	"$ZEROARG" "${ALLARGS[@]}" --input "$TMPLDIR/_stream"
+	
+	exit 0
+fi
+
+if [ -z "$MAX_PROCESSORS" ] || [ "$MAX_PROCESSORS" -ne "$MAX_PROCESSORS" ] || [ "$MAX_PROCESSORS" -lt "1" ]
+then
+	echo >&2 "Error: invalid number of processors '$MAX_PROCESSORS', must be a positive number"
+	exit 1
+fi
+
+if [ "$INFILE" == "_list" ] && [ "$MAX_PROCESSORS" -gt "1" ]
+then
+	readonly TMPLDIR=$(mktemp -d)
+	trap "rm -r $TMPLDIR" EXIT
+	
+	cat_stdin "$STDIN_FILE" | egrep . | sort | uniq > "$TMPLDIR/input_list"
+	
+	if [ ! -s "$TMPLDIR/input_list" ]
+	then
+		echo >&2 "Error: no stdin data"
+		exit 1
+	fi
+	
+	NUM_OF_INPUTS="$(cat $TMPLDIR/input_list | wc -l)"
+	SIZE_OF_PORTION="$(echo "a=$NUM_OF_INPUTS; b=$MAX_PROCESSORS; if(a%b) a/b+1 else a/b" | bc)"
+	
+	if [ "$SIZE_OF_PORTION" -gt "19997" ]
+	then
+		SIZE_OF_PORTION="19997"
+	fi
+	
+	mkdir -p "$TMPLDIR/portions"
+	
+	split -l "$SIZE_OF_PORTION" "$TMPLDIR/input_list" "$TMPLDIR/portions/portion_"
+	
+	mkdir -p "$TMPLDIR/children_tables"
+	
+	find $TMPLDIR/portions/ -type f -not -empty \
+	| awk -v outdir="$TMPLDIR/children_tables" '{print "--stdin-file " $1 " --output-table-file " outdir "/" NR ".txt"}' \
+	| xargs -L 1 -P "$MAX_PROCESSORS" "$ZEROARG" "${ALLARGS[@]}" --processors 1 --input _list
+		
+	find "$TMPLDIR/children_tables" -type f -not -empty \
+	| sort \
+	| xargs -L 1 cat \
+	| awk '{if(NR==1 || $1!="input_name") print $0}' \
+	| {
+		if [ "$DETAILED_MODE" == "true" ]
+		then
+			voronota-js --no-setup-defaults "js:voronota_tournament_sort('-input-file _stdin -output-file _stdout -columns iface_area -multipliers 1 -tolerances 0.0');"
+		else
+			voronota-js --no-setup-defaults "js:voronota_tournament_sort('-input-file _stdin -output-file _stdout -columns iface_pseudoenergy -multipliers -1 -tolerances 0.0');"
+		fi
+	} \
+	> "$TMPLDIR/full_output_table"
+	
+	if [ -n "$OUTPUT_TABLE_FILE" ] && [ "$OUTPUT_TABLE_FILE" != "_stdout" ]
+	then
+		mkdir -p "$(dirname "$OUTPUT_TABLE_FILE")"
+		cat "$TMPLDIR/full_output_table" > "$OUTPUT_TABLE_FILE"
+	else
+		cat "$TMPLDIR/full_output_table"
+	fi
+	
+	exit 0
+fi
+
+if [[ $AKBPSLAYEREDLIB == *".tar.gz" ]]
+then
+	readonly TMPLDIR=$(mktemp -d)
+	trap "rm -r $TMPLDIR" EXIT
+	
+	tar -xf "$AKBPSLAYEREDLIB" -C "${TMPLDIR}/"
+	
+	EXTRACTED_AKBPSLAYEREDLIB="${TMPLDIR}/akbps_config_bundle/akbps_layered_lib"
+	EXTRACTED_AKBPSLAYEREDLIBWEIGHTS="${TMPLDIR}/akbps_config_bundle/akbps_layered_lib_weights"
+	
+	if [ ! -s "$EXTRACTED_AKBPSLAYEREDLIB" ] || [ ! -s "$EXTRACTED_AKBPSLAYEREDLIBWEIGHTS" ]
+	then
+		echo >&2 "Error: invalid configuration bundle '$AKBPSLAYEREDLIB'"
+		exit 1
+	fi
+	
+	AKBPSLAYEREDLIB="$EXTRACTED_AKBPSLAYEREDLIB"
+	
+	if [ -z "$AKBPSLAYEREDLIBWEIGHTS" ]
+	then
+		AKBPSLAYEREDLIBWEIGHTS="$EXTRACTED_AKBPSLAYEREDLIBWEIGHTS"
+	fi
+fi
+
+AKBPSBANKET_MODE="$(cat ${AKBPSLAYEREDLIB} | awk '{if($1=="ANY" || $3=="ANY"){print "true" ; exit}} END {print "false"}' | head -1)"
+
+INFILE_BASENAME="$(get_input_basename $INFILE $STDIN_FILE)"
+OUTPUT_TABLE_FILE="$(substitute_id_in_filename "$INFILE_BASENAME" "$OUTPUT_TABLE_FILE")"
+
+{
+cat << EOF
+var common_params={}
+common_params.akbps_layered_lib='$AKBPSLAYEREDLIB';
+common_params.akbps_summing_weights='$AKBPSLAYEREDLIBWEIGHTS';
+common_params.input_is_script='$INPUT_IS_SCRIPT';
+common_params.input_as_assembly='$AS_ASSEMBLY';
+common_params.restrict_input_atoms='$RESTRICT_INPUT';
+common_params.contacts_subselection='$SUBSELECT_CONTACTS';
+common_params.run_faspr='$RUN_FASPR';
+common_params.output_table_file='$OUTPUT_TABLE_FILE';
+common_params.detailed_mode='$DETAILED_MODE';
+common_params.blanket_mode='$AKBPSBANKET_MODE';
+common_params.blanket_types_file='$BLANKET_TYPES_FILE';
+var input_info_array=[];
+EOF
+
+{
+if [ "$INFILE" == "_list" ]
+then
+	cat_stdin "$STDIN_FILE" | egrep . | sort | uniq
+else
+	echo "$INFILE"
+fi
+} | while read -r SUBINFILE
+do
+SUBINFILE_BASENAME="$(get_input_basename $SUBINFILE $STDIN_FILE)"
+cat << EOF
+input_info_array.push({"input_file": "$SUBINFILE", "input_file_name": "$SUBINFILE_BASENAME"});
+EOF
+done
+
+cat << 'EOF'
+analyze_interface=function(params, input)
+{
+
+if(!input.input_file)
+{
+	throw ("No input file");
+}
+
+if(!params.input_is_script)
+{
+	params.input_is_script="false";
+}
+
+if(!params.input_as_assembly)
+{
+	params.input_as_assembly="false";
+}
+
+if(!params.restrict_input_atoms)
+{
+	params.restrict_input_atoms='[]';
+}
+
+if(!params.contacts_subselection)
+{
+	params.contacts_subselection='[]';
+}
+
+if(!params.output_table_file)
+{
+	params.output_table_file="_stdout";
+}
+
+voronota_delete_objects();
+
+if(params.input_is_script=="true")
+{
+	voronota_source("-file", input.input_file);
+	voronota_assert_partial_success("Failed when running provided input script");
+}
+else
+{
+	voronota_import("-file", input.input_file, "-as-assembly", params.input_as_assembly);
+	voronota_assert_partial_success("Failed to import file");
+}
+
+voronota_restrict_atoms("-use", params.restrict_input_atoms);
+voronota_assert_full_success("Failed to restrict input atoms by the input query");
+
+if(params.blanket_mode=="true")
+{
+	if(params.blanket_types_file=="")
+	{
+		voronota_restrict_atoms("-use", "[-protein] or [-nucleic]");
+		voronota_assert_full_success("Failed to restrict input atoms to protein or nucleic acids only");
+	}
+}
+else
+{
+	voronota_restrict_atoms("-use", "[-protein]");
+	voronota_assert_full_success("Failed to restrict input atoms to protein only");
+}
+
+var result_initial_number_of_accepted_atoms=voronota_last_output().results[0].output.atoms_summary_new.number_total;
+
+if(params.run_faspr)
+{
+	voronota_faspr("-lib-file", params.run_faspr);
+	voronota_assert_full_success("Failed to run FASPR");
+}
+
+voronota_construct_contacts_radically_fast("-no-intra-chain", "-adjunct-circle-restrictions", [-1.6, -1.2, -0.8, -0.4, -0.0000001], "-precutting-shifts", [0.9], "-add-collapsed-adjuncts");
+voronota_assert_full_success("Failed to construct inter-chain contacts");
+
+voronota_set_adjunct_of_contacts_by_expression("-use", "[-inter-chain]", "-expression", "_linear_combo", "-parameters", [1, 0], "-input-adjuncts", ["area"], "-output-adjunct", "css6");
+
+voronota_select_contacts("-use", "([-inter-chain] and "+params.contacts_subselection+")", "-name", "inter_chain_contacts");
+voronota_assert_full_success("Failed to select inter-chain contacts");
+
+var computed_iface_energy_scores={}
+
+voronota_calculate_akbps_layered("-use", "[inter_chain_contacts]");
+voronota_assert_full_success("Failed to compute area KBPs scores");
+
+var result_akpbs=voronota_last_output().results[0].output;
+
+voronota_clash_score("-use", "[inter_chain_contacts]");
+voronota_assert_full_success("Failed to compute clash score");
+var result_clash_score=voronota_last_output().results[0].output.clash_score;
+
+var summary={}
+
+summary.input_name=input.input_file_name;
+summary.input_atoms=result_initial_number_of_accepted_atoms;
+
+summary.iface_area=result_akpbs.contacts_summary.area;
+
+if(params.detailed_mode=="true")
+{
+	Object.keys(result_akpbs.scoring_summary).forEach(function(key)
+	{
+		value=result_akpbs.scoring_summary[key];
+		if(typeof value === 'number')
+		{
+			summary[key]=value;
+		}
+	});
+}
+else
+{
+	summary["iface_pseudoenergy"]=result_akpbs.scoring_summary["weighted_sum"];
+	summary["iface_pseudoenergy_norm"]=result_akpbs.scoring_summary["weighted_sum"]/result_akpbs.contacts_summary.area;
+}
+
+summary.iface_clash_score=result_clash_score;
+
+var summary_table={}
+summary_table.header="";
+summary_table.row="";
+
+Object.keys(summary).forEach(function(key)
+{
+		summary_table.header+=key+" ";
+});
+
+Object.keys(summary).forEach(function(key)
+{
+	value=summary[key];
+	if(typeof value === 'number')
+	{
+		summary_table.row+=parseFloat(value.toFixed(5))+" ";
+	}
+	else
+	{
+		summary_table.row+=value+" ";
+	}
+});
+
+summary_table.header=summary_table.header.trim();
+summary_table.row=summary_table.row.trim();
+
+return summary_table;
+}
+
+voronota_setup_defaults("-no-load-voromqa-potentials", "-no-load-alt-voromqa-potential", "-no-load-mock-voromqa-potential");
+
+voronota_setup_akbps_layered("-potentials", common_params.akbps_layered_lib, "-summing-weights", common_params.akbps_summing_weights);
+voronota_assert_full_success("Failed to setup area KBPs-Layered");
+
+if(common_params.blanket_mode=="true" && common_params.blanket_types_file!="")
+{
+	voronota_setup_chemistry_annotating("-more-atom-types-file", common_params.blanket_types_file);
+	voronota_assert_full_success("Failed to setup custom blanket atom types");
+}
+
+var full_summary_table="";
+
+for(var i=0;i<input_info_array.length;i++)
+{
+	var subinput=input_info_array[i];
+	try
+	{
+		var summary_table=analyze_interface(common_params, subinput);
+		if(full_summary_table=="")
+		{
+			full_summary_table+=summary_table.header+"\n";
+		}
+		full_summary_table+=summary_table.row+"\n";
+	}
+	catch(error)
+	{
+		log("Failed with '"+subinput.input_file_name+"': "+error);
+	}
+}
+
+fwrite('_virtual/summary', full_summary_table);
+
+if(common_params.output_table_file!=="_stdout")
+{
+	shell('mkdir -p "$(dirname '+common_params.output_table_file+')"');
+}
+
+if(common_params.detailed_mode=="true")
+{
+	voronota_tournament_sort('-input-file', '_virtual/summary', '-output-file', common_params.output_table_file, '-columns', 'iface_area', '-multipliers', 1, '-tolerances', 0.0);
+}
+else
+{
+	voronota_tournament_sort('-input-file', '_virtual/summary', '-output-file', common_params.output_table_file, '-columns', 'iface_pseudoenergy', '-multipliers', -1, '-tolerances', 0.0);
+}
+
+voronota_assert_full_success("Failed to output sorted scores table");
+
+EOF
+
+} \
+| voronota-js --no-setup-defaults
+

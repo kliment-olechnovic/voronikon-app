@@ -1,0 +1,2 @@
+input_receptor  input_ligand        receptor_atoms  ligand_atoms  iface_area  iface_energy_worst  iface_energy_best  iface_area_canonical  iface_energy_canonical  iface_clash_score  per_unit_area_iface_energy_worst  scoring_mode
+receptor.pdb    ligand_mutated.sdf  681             119           737.184     -54.0618            -54.0618           737.184               -54.0618                0                  -0.0733356                        vorochipmunk_en

@@ -1,0 +1,7 @@
+INFO: Reading data subsets criteria from file.
+INFO: Retrieving data table from PPI3D database.
+INFO: Selecting protein complexes, started at 2025-07-07 09:06:44.337620.
+INFO: Retrieved 276699 protein complexes at 2025-07-07 09:07:09.353626.
+INFO: Selecting and filtering interaction interfaces, started at 2025-07-07 09:07:09.389035.
+INFO: Retrieved 737723 interfaces from DB at 2025-07-07 09:08:45.590287.
+INFO: Returning 5159 filtered interfaces.

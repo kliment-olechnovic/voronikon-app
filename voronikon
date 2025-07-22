@@ -1,0 +1,402 @@
+#!/bin/bash
+
+function print_help_and_exit
+{
+cat >&2 << 'EOF'
+
+'voronikon' script calculates inter-chain interfaces area statistical pseudo-energy
+for protein complexes with peptides that can contain non-canonical amino acid residues.
+
+Options:
+    --input-receptor              string  *  input file path for receptor, must be in PDB or mmCIF format
+    --input-ligand                string  *  input file path for ligand, must be in SDF format
+    --output-table-file           string     output table file path, default is '_stdout' to print to stdout
+    --output-details-dir          string     output directory path for details, default is '' to not output details
+    --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
+    --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
+    --help | -h                              flag to display help message and exit
+
+Standard output:
+    space-separated table of scores
+    
+Examples:
+
+    voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf"
+    
+    voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --print-mode v
+    
+    voronikon --input-receptor './receptor.pdb" --input-ligand "./ligand.sdf" --output-table-file "./results.txt"
+
+    voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
+
+EOF
+exit 1
+}
+
+################################################################################
+
+export LANG=C
+export LC_ALL=C
+
+SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+readonly ZEROARG=$0
+ALLARGS=("$@")
+
+if [ -z "$1" ]
+then
+	print_help_and_exit
+fi
+
+INPUT_RECEPTOR=""
+INPUT_LIGAND=""
+OUTPUT_TABLE_FILE="_stdout"
+OUTPUT_DETAILS_DIR=""
+SCORING_MODE="vorochipmunk"
+PRINT_MODE="h"
+HELP_MODE="false"
+
+while [[ $# > 0 ]]
+do
+	OPTION="$1"
+	OPTARG="$2"
+	shift
+	case $OPTION in
+	--input-receptor)
+		INPUT_RECEPTOR="$OPTARG"
+		shift
+		;;
+	--input-ligand)
+		INPUT_LIGAND="$OPTARG"
+		shift
+		;;
+	--output-table-file)
+		OUTPUT_TABLE_FILE="$OPTARG"
+		shift
+		;;
+	--output-details-dir)
+		OUTPUT_DETAILS_DIR="$OPTARG"
+		shift
+		;;
+	--scoring-mode)
+		SCORING_MODE="$OPTARG"
+		shift
+		;;
+	--print-mode)
+		PRINT_MODE="$OPTARG"
+		shift
+		;;
+	-h|--help)
+		HELP_MODE="true"
+		;;
+	*)
+		echo >&2 "Error: invalid command line option '$OPTION'"
+		exit 1
+		;;
+	esac
+done
+
+if [ "$HELP_MODE" == "true" ]
+then
+	print_help_and_exit
+fi
+
+if [ -z "$INPUT_RECEPTOR" ]
+then
+	echo >&2 "Error: no input receptor file provided"
+	exit 1
+fi
+
+if [ -z "$INPUT_LIGAND" ]
+then
+	echo >&2 "Error: no input ligand file provided"
+	exit 1
+fi
+
+if [ -n "$INPUT_RECEPTOR" ] && [ ! -s "$INPUT_RECEPTOR" ]
+then
+	echo >&2 "Error: no input receptor file '$INPUT_RECEPTOR'"
+	exit 1
+fi
+
+if [ -n "$INPUT_LIGAND" ] && [ ! -s "$INPUT_LIGAND" ]
+then
+	echo >&2 "Error: no input receptor file '$INPUT_LIGAND'"
+	exit 1
+fi
+
+if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ]
+then
+	echo >&2 "Error: invalid scoring mode '$SCORING_MODE', must be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en'"
+	exit 1
+fi
+
+if [ "$PRINT_MODE" != "h" ] && [ "$PRINT_MODE" != "v" ]
+then
+	echo >&2 "Error: invalid printing mode '$PRINT_MODE', must be 'h' or 'v'"
+	exit 1
+fi
+
+readonly TMPLDIR=$(mktemp -d)
+trap "rm -r $TMPLDIR" EXIT
+
+cat "$INPUT_RECEPTOR" > "${TMPLDIR}/receptor.pdb"
+
+cat "$INPUT_LIGAND" > "${TMPLDIR}/ligand.sdf"
+
+cd "$TMPLDIR"
+
+${SCRIPTDIR}/tools/Knodle --isdf ./ligand.sdf -o "./ligand.mol2"
+
+if [ ! -s "./ligand.mol2" ]
+then
+	echo >&2 "Error: failed to process the ligand with Knodle"
+	exit 1
+fi
+
+cat "./ligand.mol2" \
+| egrep '^@<TRIPOS>ATOM' -A 99999 \
+| egrep '^@<TRIPOS>BOND' -B 99999 \
+| egrep -v '^@' \
+| awk '{if($2!="H"){print $0}}' \
+> ./ligand_table.txt
+
+cat ./ligand_table.txt \
+| awk '{print "LIG " $2 NR " " $6}' \
+> ./ligand_atom_types.txt
+
+cat ./ligand_table.txt \
+| awk '{print "c<x>r<1>a<" NR ">R<LIG>A<" $2 NR "> " $3 " " $4 " " $5 " 1.7 el=" $2 " oc=1"}' \
+> ./ligand_atoms.pa
+
+NUM_OF_LIGAND_ATOMS="$(cat ./ligand_atoms.pa | wc -l)"
+
+{
+cat << 'EOF'
+voronota_setup_defaults("-no-load-voromqa-potentials", "-no-load-more-atom-types", "-no-load-mock-voromqa-potential");
+voronota_import("-file", "ligand_atoms.pa");
+voronota_export_atoms_to_mmcif("-file", "ligand_atoms.cif");
+EOF
+} \
+| ${SCRIPTDIR}/tools/voronota-js --no-setup-defaults
+
+if [ ! -s "./ligand_atoms.cif" ]
+then
+	echo >&2 "Error: failed to write the ligand to mmCIF file"
+	exit 1
+fi
+
+{
+cat << 'EOF'
+voronota_setup_defaults("-no-load-voromqa-potentials", "-no-load-more-atom-types", "-no-load-mock-voromqa-potential");
+voronota_import("-file", "receptor.pdb", "-title", "receptor");
+voronota_import("-file", "ligand_atoms.cif", "-title", "ligand");
+voronota_merge_objects("-names", ["receptor", "ligand"], "-title", "complex");
+voronota_pick_objects("-names", ["complex"]);
+voronota_export_atoms_to_mmcif("-file", "complex.cif");
+EOF
+} \
+| ${SCRIPTDIR}/tools/voronota-js --no-setup-defaults
+
+if [ ! -s "./complex.cif" ]
+then
+	echo >&2 "Error: failed to write the protein-ligand complex to mmCIF file"
+	exit 1
+fi
+
+{
+cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
+cat ./ligand_atom_types.txt
+} \
+| egrep '.' \
+| column -t \
+> ./custom_blanket_types_zero.txt
+
+if [ "$SCORING_MODE" == "voromqa" ]
+then
+	${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+	  --input "./complex.cif" \
+	  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+	  --blanket \
+	  --blanket-types-file "./custom_blanket_types_zero.txt" \
+	  --output-ia-contacts-file "./contacts_ia.txt" \
+	  --output-ir-contacts-file "./contacts_ir.txt" \
+	> "./global_scores_zero.txt"
+else
+	${SCRIPTDIR}/tools/vorochipmunk-blanket \
+	  --akbps-layered-lib-weights "$SCORING_MODE" \
+	  --input "./complex.cif" \
+	  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+	  --blanket-types-file "./custom_blanket_types_zero.txt" \
+	> "./global_scores_zero.txt"
+fi
+
+if [ ! -s "./global_scores_zero.txt" ]
+then
+	echo >&2 "Error: failed to calculate base scores"
+	exit 1
+fi
+
+read NUM_OF_ATOMS IFACE_AREA IFACE_ENERGY IFACE_CLASH_SCORE <<< "$(tail -1 ./global_scores_zero.txt | awk '{print $2 " " $3 " " $4 " " $6}')"
+
+{
+cat ./ligand_atom_types.txt | awk '{print $3}' | sort | uniq
+cat "${SCRIPTDIR}/tools/canonical_raw_types.txt"
+cat "${SCRIPTDIR}/tools/canonical_raw_types.txt"
+} \
+| sort | uniq -c | awk '{if($1<2){print $2}}' \
+> ./unmatched_ligand_atom_types.txt
+
+if [ -s "./unmatched_ligand_atom_types.txt" ]
+then
+	{
+	while read -r UNKNOWNTYPE
+	do
+		cat ./ligand_atom_types.txt | awk -v a=${UNKNOWNTYPE} '{if($3==a){print $2}}'
+	done < ./unmatched_ligand_atom_types.txt
+	} \
+	| tr '\n' ',' | sed 's/,$//' \
+	> ./list_of_non_canonical_atom_ids.txt
+	
+	CANONICALSELECTION="$(cat ./list_of_non_canonical_atom_ids.txt | head -1 | awk '{print "[-a1 [-chain x] -a2! [-chain x] -a1! [-aname " $1 "]]"}')"
+	
+	if [ "$SCORING_MODE" == "voromqa" ]
+	then
+		${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+		  --input "./complex.cif" \
+		  --subselect-contacts "$CANONICALSELECTION" \
+		  --blanket \
+		  --blanket-types-file "./custom_blanket_types_zero.txt" \
+		> "./global_scores_canonical.txt"
+	else
+		${SCRIPTDIR}/tools/vorochipmunk-blanket \
+		  --akbps-layered-lib-weights "$SCORING_MODE" \
+		  --input "./complex.cif" \
+		  --subselect-contacts "$CANONICALSELECTION" \
+		  --blanket-types-file "./custom_blanket_types_zero.txt" \
+		> "./global_scores_canonical.txt"
+	fi
+	
+	if [ ! -s "./global_scores_canonical.txt" ]
+	then
+		read CANONICAL_IFACE_AREA CANONICAL_IFACE_ENERGY <<< "0 0"
+	else
+		read CANONICAL_IFACE_AREA CANONICAL_IFACE_ENERGY <<< "$(tail -1 ./global_scores_canonical.txt | awk '{print $3 " " $4}')"
+	fi
+	
+	while read -r UNKNOWNTYPE
+	do
+		while read -r CANONICALTYPE
+		do
+			{
+			cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
+			cat ./ligand_atom_types.txt | awk -v a=${UNKNOWNTYPE} -v b=${CANONICALTYPE} '{if($3==a){print $1 " " $2 " " b}else{print $0}}'
+			} \
+			| egrep '.' \
+			| column -t \
+			> "./custom_blanket_types_shifted.txt"
+			
+			if [ "$SCORING_MODE" == "voromqa" ]
+			then
+				${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+				  --input "./complex.cif" \
+				  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+				  --blanket \
+				  --blanket-types-file "./custom_blanket_types_shifted.txt" \
+				> "./global_scores_shifted.txt"
+			else
+				${SCRIPTDIR}/tools/vorochipmunk-blanket \
+				  --akbps-layered-lib-weights "$SCORING_MODE" \
+				  --input "./complex.cif" \
+				  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+				  --blanket-types-file "./custom_blanket_types_shifted.txt" \
+				> "./global_scores_shifted.txt"
+			fi
+	
+			if [ ! -s "./global_scores_shifted.txt" ]
+			then
+				echo >&2 "Error: failed to calculate shifted scores"
+				exit 1
+			fi
+			
+			IFACE_ENERGY_SHIFTED="$(tail -1 ./global_scores_shifted.txt | awk '{print $4}')"
+			
+			echo "${UNKNOWNTYPE} ${CANONICALTYPE} ${IFACE_ENERGY_SHIFTED}"
+		done \
+		< "${SCRIPTDIR}/tools/canonical_raw_types.txt" \
+		| sort -n -k3,3 \
+		> "./sorted_energies_for_shifted.txt"
+		
+		read IFACE_ENERGY_SHIFTED_LOW_NAME IFACE_ENERGY_SHIFTED_LOW <<< "$(head -1 ./sorted_energies_for_shifted.txt | awk '{print $2 " " $3}')"
+		read IFACE_ENERGY_SHIFTED_HIGH_NAME IFACE_ENERGY_SHIFTED_HIGH <<< "$(tail -1 ./sorted_energies_for_shifted.txt | awk '{print $2 " " $3}')"
+		
+		rm -f "./global_scores_shifted.txt" "./sorted_energies_for_shifted.txt"
+		
+		echo "${UNKNOWNTYPE} ${IFACE_ENERGY} ${IFACE_ENERGY_SHIFTED_LOW} ${IFACE_ENERGY_SHIFTED_HIGH} ${IFACE_ENERGY_SHIFTED_LOW_NAME} ${IFACE_ENERGY_SHIFTED_HIGH_NAME}" \
+		| awk '{print $1 " " ($3-$2) " " ($4-$2) " " $5 " " $6}'
+	done \
+	< ./unmatched_ligand_atom_types.txt \
+	> "./global_energy_shifts_min_max.txt"
+
+	{
+	echo "${IFACE_ENERGY} ${IFACE_ENERGY}"
+	cat "./global_energy_shifts_min_max.txt" | awk '{print $2 " " $3}'
+	} \
+	| awk '{energy_low+=$1; energy_high+=$2} END {print energy_low " " energy_high}' \
+	> "./global_energy_min_max.txt"
+
+	read IFACE_ENERGY_LOW IFACE_ENERGY_HIGH <<< "$(cat ./global_energy_min_max.txt)"
+
+	{
+	echo "noncanonical_atom energy_shift_worst energy_shift_best replacement_atom_worst replacement_atom_best"
+	cat "./global_energy_shifts_min_max.txt" | awk '{print $1 " " $3 " " $2 " " $5 " " $4}'
+	} \
+	| column -t \
+	> "./final_result_shifts.txt"
+else
+	read CANONICAL_IFACE_AREA CANONICAL_IFACE_ENERGY <<< "${IFACE_AREA} ${IFACE_ENERGY}"
+	read IFACE_ENERGY_LOW IFACE_ENERGY_HIGH <<< "${IFACE_ENERGY} ${IFACE_ENERGY}"
+fi
+
+NUM_OF_RECEPTOR_ATOMS="$(echo ${NUM_OF_ATOMS} ${NUM_OF_LIGAND_ATOMS} | awk '{print ($1-$2)}')"
+
+IFACE_ENERGY_HIGH_PER_UNIT_AREA="$(echo ${IFACE_ENERGY_HIGH} ${IFACE_AREA} | awk '{print ($1/$2)}')"
+
+{
+echo "input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode"
+echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE}"
+} \
+| column -t \
+> "./final_result.txt"
+
+cd - &> /dev/null
+
+if [ -n "$OUTPUT_TABLE_FILE" ] && [ "$OUTPUT_TABLE_FILE" != "_stdout" ]
+then
+	mkdir -p "$(dirname "$OUTPUT_TABLE_FILE")"
+	cat "${TMPLDIR}/final_result.txt" > "$OUTPUT_TABLE_FILE"
+else
+	if [ "$PRINT_MODE" == "v" ]
+	then
+		paste \
+		  <(cat "${TMPLDIR}/final_result.txt" | head -1 | sed 's/\s\+/\n/g') \
+		  <(cat "${TMPLDIR}/final_result.txt" | tail -1 | sed 's/\s\+/\n/g') \
+		| column -t
+	else
+		cat "${TMPLDIR}/final_result.txt"
+	fi
+fi
+
+if [ -n "$OUTPUT_DETAILS_DIR" ]
+then
+	mkdir -p "$OUTPUT_DETAILS_DIR"
+	mv "${TMPLDIR}/complex.cif" "${OUTPUT_DETAILS_DIR}/complex.cif"
+	mv "${TMPLDIR}/final_result.txt" "${OUTPUT_DETAILS_DIR}/global_scores.txt"
+	[ -s "${TMPLDIR}/final_result_shifts.txt" ] && mv "${TMPLDIR}/final_result_shifts.txt" "${OUTPUT_DETAILS_DIR}/non_canonical_parts_in_global_scores.txt"
+	[ -s "${TMPLDIR}/contacts_ia.txt" ] && mv "${TMPLDIR}/contacts_ia.txt" "${OUTPUT_DETAILS_DIR}/contacts_inter_atom.txt"
+	[ -s "${TMPLDIR}/contacts_ir.txt" ] && mv "${TMPLDIR}/contacts_ir.txt" "${OUTPUT_DETAILS_DIR}/contacts_inter_residue.txt"
+fi
+
+
+
+
