@@ -20,18 +20,25 @@ cd ./voronikon
 
 ## Setting up an environment for running VoroNikon
 
-VoroNikon comes with a statically built 'voronota-js' and 'Knodle' binaries for Linux in the 'tools' subdirectory.
+VoroNikon comes with statically built 'voronota-js', 'voronota-lt' and 'Knodle' binaries for Linux in the 'tools' subdirectory.
 
-The source code for 'voronota-js' is also included, and can be used to build 'voronota-js' with the following command: 
+The source code for 'voronota-js' and 'voronota-lt' is also included, and can be used to build 'voronota-js' and 'voronota-lt' with the following single command: 
+
+```bash
+./tools/build-all.bash
+```
+
+or with two separate commands:
 
 ```bash
 ./tools/build-voronota-js.bash
+./tools/build-voronota-lt.bash
 ```
 
 Sadly, [Knodle](https://team.inria.fr/nano-d/software/knodle/) is closed-sourced, and the latest available version of Knodle only runs on Linux.
 Thus, the current version of VoroNikon will only run on Linux.
 
-VoroNikon does not require any setup apart from an optional rebuilding of 'voronota-js' binary in the 'tools' subdirectory.
+VoroNikon does not require any setup apart from an optional rebuilding of 'voronota-js' and 'voronota-lt' binaries in the 'tools' subdirectory.
 
 
 # Running the VoroNikon command-line tool
@@ -56,7 +63,7 @@ Options:
     --input-ligand                string  *  input file path for ligand, must be in SDF format
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk', default is 'vorochipmunk'
+    --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --help | -h                              flag to display help message and exit
 
@@ -103,6 +110,8 @@ iface_energy_canonical            -27.0334
 iface_clash_score                 0
 per_unit_area_iface_energy_worst  -0.0184229
 scoring_mode                      vorochipmunk
+ligand_sasa                       895.386
+ligand_volume                     3000.84
 ```
 
 ## In VoroMQA mode
@@ -132,6 +141,8 @@ iface_energy_canonical            -452.198
 iface_clash_score                 0
 per_unit_area_iface_energy_worst  -0.542974
 scoring_mode                      voromqa
+ligand_sasa                       895.386
+ligand_volume                     3000.84
 ```
 
 # Interpreting VoroNikon scores

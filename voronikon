@@ -212,6 +212,14 @@ cat ./ligand_atom_types.txt
 | column -t \
 > ./custom_blanket_types_zero.txt
 
+read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="x"){print $5 " " $6}}')"
+
+if [ -z "$LIGAND_SASA" ] || [ -z "$LIGAND_VOLUME" ]
+then
+	echo >&2 "Error: failed to calculate ligand volume and SASA"
+	exit 1
+fi
+
 if [ "$SCORING_MODE" == "voromqa" ]
 then
 	${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
@@ -363,8 +371,8 @@ NUM_OF_RECEPTOR_ATOMS="$(echo ${NUM_OF_ATOMS} ${NUM_OF_LIGAND_ATOMS} | awk '{pri
 IFACE_ENERGY_HIGH_PER_UNIT_AREA="$(echo ${IFACE_ENERGY_HIGH} ${IFACE_AREA} | awk '{print ($1/$2)}')"
 
 {
-echo "input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode"
-echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE}"
+echo "input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode ligand_sasa ligand_volume"
+echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
 } \
 | column -t \
 > "./final_result.txt"

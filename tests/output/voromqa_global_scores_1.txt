@@ -1,2 +1,2 @@
-input_receptor  input_ligand  receptor_atoms  ligand_atoms  iface_area  iface_energy_worst  iface_energy_best  iface_area_canonical  iface_energy_canonical  iface_clash_score  per_unit_area_iface_energy_worst  scoring_mode
-receptor.pdb    ligand.sdf    681             119           749.662     -407.047            -582.603           629.189               -452.198                0                  -0.542974                         voromqa
+input_receptor  input_ligand  receptor_atoms  ligand_atoms  iface_area  iface_energy_worst  iface_energy_best  iface_area_canonical  iface_energy_canonical  iface_clash_score  per_unit_area_iface_energy_worst  scoring_mode  ligand_sasa  ligand_volume
+receptor.pdb    ligand.sdf    681             119           749.662     -407.047            -582.603           629.189               -452.198                0                  -0.542974                         voromqa       895.386      3000.84
