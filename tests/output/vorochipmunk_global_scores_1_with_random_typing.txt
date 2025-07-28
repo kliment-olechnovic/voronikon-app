@@ -13,7 +13,7 @@ scoring_mode                      vorochipmunk
 ligand_sasa                       895.386
 ligand_volume                     3000.84
 random_runs                       15
-mean_random_iface_energy          -15.2283183333333
-sd_random_iface_energy            4.09707424277011
-min_random_iface_energy           -21.608
-max_random_iface_energy           -6.89284
+mean_random_iface_energy          -0.410449333333333
+sd_random_iface_energy            9.41154150104955
+min_random_iface_energy           -11.8089
+max_random_iface_energy           28.0856

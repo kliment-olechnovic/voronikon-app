@@ -13,7 +13,7 @@ scoring_mode                      voromqa
 ligand_sasa                       895.386
 ligand_volume                     3000.84
 random_runs                       15
-mean_random_iface_energy          -392.389533333333
-sd_random_iface_energy            34.7625100927024
-min_random_iface_energy           -461.5325
-max_random_iface_energy           -328.8075
+mean_random_iface_energy          -235.339533333333
+sd_random_iface_energy            37.6423042824857
+min_random_iface_energy           -293.066
+max_random_iface_energy           -169.536
