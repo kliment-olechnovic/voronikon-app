@@ -1,0 +1,103 @@
+#!/bin/bash
+
+export LANG=C
+export LC_ALL=C
+
+SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+INPUT="$1"
+OUTPUT_RECEPTOR="$2"
+OUTPUT_LIGAND="$3"
+
+if [ -z "$INPUT" ]
+then
+	echo >&2 "Error: input file not provided"
+	exit 1
+fi
+
+if [ ! -s "$INPUT" ]
+then
+	echo >&2 "Error: input file '$INPUT' does not exist"
+	exit 1
+fi
+
+if [ -z "$OUTPUT_RECEPTOR" ]
+then
+	echo >&2 "Error: output PDB file not provided"
+	exit 1
+fi
+
+if [ -z "$OUTPUT_LIGAND" ]
+then
+	echo >&2 "Error: output SDF file not provided"
+	exit 1
+fi
+
+readonly TMPLDIR=$(mktemp -d)
+trap "rm -r $TMPLDIR" EXIT
+
+cat "$INPUT" > "${TMPLDIR}/input"
+
+cd "$TMPLDIR"
+
+{
+cat << EOF
+voronota_setup_defaults("-no-load-voromqa-potentials", "-no-load-more-atom-types", "-no-load-mock-voromqa-potential");
+EOF
+
+if [[ "$INPUT" == *.cif ]] || [[ "$INPUT" == *.CIF ]]
+then
+cat << EOF
+voronota_import_mmcif("-files", ["./input"], "-include-heteroatoms");
+EOF
+else
+cat << EOF
+voronota_import("-file", "./input", "-include-heteroatoms");
+EOF
+fi
+
+cat << EOF
+voronota_delete_tags_of_atoms("-tags", "het");
+voronota_export_atoms("-use", "[-protein]", "-as-pdb", "-file", "receptor.pdb");
+voronota_export_atoms("-use", "(not ([-protein]))", "-file", "ligand.pa");
+EOF
+} \
+| ${SCRIPTDIR}/voronota-js --no-setup-defaults
+
+if [ ! -s "receptor.pdb" ]
+then
+	echo >&2 "Error: failed to read receptor atoms from '${INPUT}'"
+	exit 1
+fi
+
+if [ ! -s "ligand.pa" ]
+then
+	echo >&2 "Error: failed to read ligand atoms from '${INPUT}'"
+	exit 1
+fi
+
+{
+cat ligand.pa | wc -l
+echo
+cat ligand.pa | awk '{print $6 " " $2 " " $3 " " $4}' | sed 's/^el=//'
+} \
+> ligand.xyz
+
+obabel ligand.xyz -O ligand.sdf &> ./obabel.log
+
+if [ ! -s "ligand.sdf" ]
+then
+	echo >&2 "Error: failed to covert '${INPUT}' to SDF"
+	exit 1
+fi
+
+cd - &> /dev/null
+
+mkdir -p "$(dirname ${OUTPUT_RECEPTOR})"
+
+cat "${TMPLDIR}/receptor.pdb" > "${OUTPUT_RECEPTOR}"
+
+mkdir -p "$(dirname ${OUTPUT_LIGAND})"
+
+cat "${TMPLDIR}/ligand.sdf" > "${OUTPUT_LIGAND}"
+

@@ -8,8 +8,9 @@ cat >&2 << 'EOF'
 for protein complexes with peptides that can contain non-canonical amino acid residues.
 
 Options:
-    --input-receptor              string  *  input file path for receptor, must be in PDB or mmCIF format
-    --input-ligand                string  *  input file path for ligand, must be in SDF format
+    --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
+    --input-ligand                string     input file path for ligand, must be in SDF format
+    --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
     --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
@@ -31,6 +32,8 @@ Examples:
     voronikon --input-receptor './receptor.pdb" --input-ligand "./ligand.sdf" --output-table-file "./results.txt"
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
+    
+    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa"
 
 EOF
 exit 1
@@ -53,6 +56,7 @@ fi
 
 INPUT_RECEPTOR=""
 INPUT_LIGAND=""
+INPUT_COMPLEX=""
 OUTPUT_TABLE_FILE="_stdout"
 OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
@@ -74,6 +78,10 @@ do
 		;;
 	--input-ligand)
 		INPUT_LIGAND="$OPTARG"
+		shift
+		;;
+	--input-complex)
+		INPUT_COMPLEX="$OPTARG"
 		shift
 		;;
 	--output-table-file)
@@ -119,28 +127,43 @@ then
 	print_help_and_exit
 fi
 
-if [ -z "$INPUT_RECEPTOR" ]
+if [ -n "$INPUT_COMPLEX" ]
 then
-	echo >&2 "Error: no input receptor file provided"
-	exit 1
-fi
-
-if [ -z "$INPUT_LIGAND" ]
-then
-	echo >&2 "Error: no input ligand file provided"
-	exit 1
-fi
-
-if [ -n "$INPUT_RECEPTOR" ] && [ ! -s "$INPUT_RECEPTOR" ]
-then
-	echo >&2 "Error: no input receptor file '$INPUT_RECEPTOR'"
-	exit 1
-fi
-
-if [ -n "$INPUT_LIGAND" ] && [ ! -s "$INPUT_LIGAND" ]
-then
-	echo >&2 "Error: no input receptor file '$INPUT_LIGAND'"
-	exit 1
+	if [ -n "$INPUT_RECEPTOR" ] || [ -n "$INPUT_LIGAND" ]
+	then
+		echo >&2 "Error: conflict with input arguments, both complex and receptor and/or ligand provided"
+		exit 1
+	fi
+	
+	if [ ! -s "$INPUT_COMPLEX" ]
+	then
+		echo >&2 "Error: no input complex file '$INPUT_COMPLEX'"
+		exit 1
+	fi
+else
+	if [ -z "$INPUT_RECEPTOR" ]
+	then
+		echo >&2 "Error: no input receptor file provided"
+		exit 1
+	fi
+	
+	if [ -z "$INPUT_LIGAND" ]
+	then
+		echo >&2 "Error: no input ligand file provided"
+		exit 1
+	fi
+	
+	if [ -n "$INPUT_RECEPTOR" ] && [ ! -s "$INPUT_RECEPTOR" ]
+	then
+		echo >&2 "Error: no input receptor file '$INPUT_RECEPTOR'"
+		exit 1
+	fi
+	
+	if [ -n "$INPUT_LIGAND" ] && [ ! -s "$INPUT_LIGAND" ]
+	then
+		echo >&2 "Error: no input ligand file '$INPUT_LIGAND'"
+		exit 1
+	fi
 fi
 
 if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ]
@@ -157,6 +180,23 @@ fi
 
 readonly TMPLDIR=$(mktemp -d)
 trap "rm -r $TMPLDIR" EXIT
+
+if [ -n "$INPUT_COMPLEX" ]
+then
+	NAMEPREFIX="$(basename ${INPUT_COMPLEX} .pdb)"
+	NAMEPREFIX="$(basename ${NAMEPREFIX} .cif)"
+	${SCRIPTDIR}/tools/split-complex-into-receptor-and-ligand "$INPUT_COMPLEX" "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
+	
+	if [ ! -s "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" ] || [ ! -s "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf" ]
+	then
+		echo >&2 "Error: failed to split ${INPUT_COMPLEX} into receptor and ligand files."
+		exit 1
+	fi
+	
+	${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --input-complex "" --input-receptor "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" --input-ligand "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
+	
+	exit 0
+fi
 
 if [ "$REPEATRANDOM" -gt "0" ]
 then
