@@ -11,6 +11,7 @@ Options:
     --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
     --input-ligand                string     input file path for ligand, must be in SDF format
     --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
+    --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
     --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
@@ -33,7 +34,7 @@ Examples:
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
     
-    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa"
+    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa" --output-id "test1"
 
 EOF
 exit 1
@@ -57,6 +58,7 @@ fi
 INPUT_RECEPTOR=""
 INPUT_LIGAND=""
 INPUT_COMPLEX=""
+OUTPUT_ID=""
 OUTPUT_TABLE_FILE="_stdout"
 OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
@@ -82,6 +84,10 @@ do
 		;;
 	--input-complex)
 		INPUT_COMPLEX="$OPTARG"
+		shift
+		;;
+	--output-id)
+		OUTPUT_ID="$OPTARG"
 		shift
 		;;
 	--output-table-file)
@@ -529,9 +535,18 @@ NUM_OF_RECEPTOR_ATOMS="$(echo ${NUM_OF_ATOMS} ${NUM_OF_LIGAND_ATOMS} | awk '{pri
 
 IFACE_ENERGY_HIGH_PER_UNIT_AREA="$(echo ${IFACE_ENERGY_HIGH} ${IFACE_AREA} | awk '{print ($1/$2)}')"
 
+GLOBALPREFIX_HEADER="input_receptor input_ligand"
+GLOBALPREFIX_VALUE="$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND})"
+
+if [ -n "$OUTPUT_ID" ]
+then
+	GLOBALPREFIX_HEADER="ID ${GLOBALPREFIX_HEADER}"
+	GLOBALPREFIX_VALUE="${OUTPUT_ID} ${GLOBALPREFIX_VALUE}"
+fi
+
 {
-echo "input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode ligand_sasa ligand_volume"
-echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE_PREFIX}${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
+echo "${GLOBALPREFIX_HEADER} receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode ligand_sasa ligand_volume"
+echo "${GLOBALPREFIX_VALUE} ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE_PREFIX}${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
 } \
 | column -t \
 > "./final_result.txt"

@@ -35,6 +35,7 @@ do
   ../voronikon \
     --input-complex ./input/complex.cif \
     --scoring-mode ${SCORINGMODE}  \
+    --output-id "test1" \
   > "./output/${SCORINGMODE}_global_scores_1_from_complex.txt"
 done
 
