@@ -16,6 +16,7 @@ Options:
     --randomize-atom-types        string     flag to randomly assign ligand atom types, default is 'false'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --repeat-random               number     number of times to run in random mode and output summary, default is '0'
+    --randomization-seed          number     number to use for seeding pseudorandom nuber generation, default is '0' for no seeding
     --help | -h                              flag to display help message and exit
 
 Standard output:
@@ -56,6 +57,7 @@ OUTPUT_TABLE_FILE="_stdout"
 OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
 RANDOMIZEATOMTYPES="false"
+RANDOMIZATION_SEED="0"
 PRINT_MODE="h"
 REPEATRANDOM="0"
 HELP_MODE="false"
@@ -88,6 +90,10 @@ do
 		;;
 	--randomize-atom-types)
 		RANDOMIZEATOMTYPES="$OPTARG"
+		shift
+		;;
+	--randomization-seed)
+		RANDOMIZATION_SEED="$OPTARG"
 		shift
 		;;
 	--print-mode)
@@ -165,7 +171,14 @@ then
 	
 	for RANDOMITER in $(seq 1 ${REPEATRANDOM})
 	do
-		${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --randomize-atom-types "true"
+		SEEDVALUE="$(echo ${RANDOMIZATION_SEED} ${RANDOMITER} | awk '{print ($1*$2)}')"
+		${SCRIPTDIR}/voronikon \
+		  --input-receptor "$INPUT_RECEPTOR" \
+		  --input-ligand "$INPUT_LIGAND" \
+		  --scoring-mode "$SCORING_MODE" \
+		  --print-mode "h" \
+		  --randomize-atom-types "true" \
+		  --randomization-seed "${SEEDVALUE}"
 	done \
 	| awk '{if(NR==1 || $1!="input_receptor"){print $0}}' \
 	> "${TMPLDIR}/randomized_scores.txt"
@@ -244,11 +257,27 @@ SCORING_MODE_PREFIX=""
 
 if [ "$RANDOMIZEATOMTYPES" == "true" ]
 then
-	cat ./ligand_atom_types.txt | while read -r RNAME ANAME ATYPE
+	NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE="$(cat ./ligand_atom_types.txt | wc -l)"
+	
+	for COPYREP in $(seq 1 ${NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE})
 	do
-		RANDOMTYPE="$(cat ${SCRIPTDIR}/tools/canonical_raw_types.txt | egrep '^C|^N|^O' | shuf | head -1)"
-		echo "${RNAME} ${ANAME} ${RANDOMTYPE}"
-	done > ./random_ligand_atom_types.txt
+		cat "${SCRIPTDIR}/tools/canonical_raw_types.txt" | egrep '^C|^N|^O'
+	done \
+	| {
+	if [ "$RANDOMIZATION_SEED" -gt "0" ]
+	then
+		awk -v seed=${RANDOMIZATION_SEED} 'BEGIN {srand(seed)} {print rand() "\t" $0}' | sort -k1,1n | awk '{print $2}'
+	else
+		shuf
+	fi
+	} \
+	| head -n "$NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE" \
+	> ./pseudorandom_list_of_atom_types.txt
+	
+	paste ./ligand_atom_types.txt ./pseudorandom_list_of_atom_types.txt \
+	| awk '{print $1 " " $2 " " $4}' \
+	> ./random_ligand_atom_types.txt
+	
 	mv ./random_ligand_atom_types.txt ./ligand_atom_types.txt
 	
 	SCORING_MODE_PREFIX="random_"
