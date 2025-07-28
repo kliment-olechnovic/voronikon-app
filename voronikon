@@ -15,6 +15,7 @@ Options:
     --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --randomize-atom-types        string     flag to randomly assign ligand atom types, default is 'false'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
+    --repeat-random               number     number of times to run in random mode and output summary, default is '0'
     --help | -h                              flag to display help message and exit
 
 Standard output:
@@ -56,6 +57,7 @@ OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
 RANDOMIZEATOMTYPES="false"
 PRINT_MODE="h"
+REPEATRANDOM="0"
 HELP_MODE="false"
 
 while [[ $# > 0 ]]
@@ -90,6 +92,10 @@ do
 		;;
 	--print-mode)
 		PRINT_MODE="$OPTARG"
+		shift
+		;;
+	--repeat-random)
+		REPEATRANDOM="$OPTARG"
 		shift
 		;;
 	-h|--help)
@@ -145,6 +151,69 @@ fi
 
 readonly TMPLDIR=$(mktemp -d)
 trap "rm -r $TMPLDIR" EXIT
+
+if [ "$REPEATRANDOM" -gt "0" ]
+then
+	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --randomize-atom-types "false" \
+	> "${TMPLDIR}/nonrandomized_scores.txt"
+	
+	if [ ! -s "${TMPLDIR}/nonrandomized_scores.txt" ]
+	then
+		echo >&2 "Error: failed to run in non-randomized mode before running in randomized mode."
+		exit 1
+	fi
+	
+	for RANDOMITER in $(seq 1 ${REPEATRANDOM})
+	do
+		${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --randomize-atom-types "true"
+	done \
+	| awk '{if(NR==1 || $1!="input_receptor"){print $0}}' \
+	> "${TMPLDIR}/randomized_scores.txt"
+	
+	if [ ! -s "${TMPLDIR}/randomized_scores.txt" ]
+	then
+		echo >&2 "Error: failed to run in randomized mode."
+		exit 1
+	fi
+	
+	cd "$TMPLDIR"
+	
+R --vanilla << 'EOF' > /dev/null
+df0=read.table("nonrandomized_scores.txt", header=TRUE, stringsAsFactors=FALSE);
+df=read.table("randomized_scores.txt", header=TRUE, stringsAsFactors=FALSE);
+df0$random_runs=nrow(df);
+df0$mean_random_iface_energy=mean((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0$sd_random_iface_energy=sd((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0$min_random_iface_energy=min((df$iface_energy_worst+df$iface_energy_best)*0.5);
+write.table(df0, file="merged_scores.txt", row.names=FALSE, col.names=TRUE, quote=FALSE, sep=" ");
+EOF
+
+	cd - &> /dev/null
+	
+	if [ ! -s "${TMPLDIR}/merged_scores.txt" ]
+	then
+		echo >&2 "Error: failed to summarize results of random runs."
+		exit 1
+	fi
+	
+	if [ -n "$OUTPUT_TABLE_FILE" ] && [ "$OUTPUT_TABLE_FILE" != "_stdout" ]
+	then
+		mkdir -p "$(dirname "$OUTPUT_TABLE_FILE")"
+		cat "${TMPLDIR}/merged_scores.txt" | column -t > "$OUTPUT_TABLE_FILE"
+	else
+		if [ "$PRINT_MODE" == "v" ]
+		then
+			paste \
+			  <(cat "${TMPLDIR}/merged_scores.txt" | head -1 | sed 's/\s\+/\n/g') \
+			  <(cat "${TMPLDIR}/merged_scores.txt" | tail -1 | sed 's/\s\+/\n/g') \
+			| column -t
+		else
+			cat "${TMPLDIR}/merged_scores.txt" | column -t
+		fi
+	fi
+
+	exit 0
+fi
 
 cat "$INPUT_RECEPTOR" > "${TMPLDIR}/receptor.pdb"
 
