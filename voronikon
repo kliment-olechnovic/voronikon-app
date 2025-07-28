@@ -13,6 +13,7 @@ Options:
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
     --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
+    --randomize-atom-types        string     flag to randomly assign ligand atom types, default is 'false'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --help | -h                              flag to display help message and exit
 
@@ -53,6 +54,7 @@ INPUT_LIGAND=""
 OUTPUT_TABLE_FILE="_stdout"
 OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
+RANDOMIZEATOMTYPES="false"
 PRINT_MODE="h"
 HELP_MODE="false"
 
@@ -80,6 +82,10 @@ do
 		;;
 	--scoring-mode)
 		SCORING_MODE="$OPTARG"
+		shift
+		;;
+	--randomize-atom-types)
+		RANDOMIZEATOMTYPES="$OPTARG"
 		shift
 		;;
 	--print-mode)
@@ -164,6 +170,20 @@ cat "./ligand.mol2" \
 cat ./ligand_table.txt \
 | awk '{print "LIG " $2 NR " " $6}' \
 > ./ligand_atom_types.txt
+
+SCORING_MODE_PREFIX=""
+
+if [ "$RANDOMIZEATOMTYPES" == "true" ]
+then
+	cat ./ligand_atom_types.txt | while read -r RNAME ANAME ATYPE
+	do
+		RANDOMTYPE="$(cat ${SCRIPTDIR}/tools/canonical_raw_types.txt | egrep '^C|^N|^O' | shuf | head -1)"
+		echo "${RNAME} ${ANAME} ${RANDOMTYPE}"
+	done > ./random_ligand_atom_types.txt
+	mv ./random_ligand_atom_types.txt ./ligand_atom_types.txt
+	
+	SCORING_MODE_PREFIX="random_"
+fi
 
 cat ./ligand_table.txt \
 | awk '{print "c<x>r<1>a<" NR ">R<LIG>A<" $2 NR "> " $3 " " $4 " " $5 " 1.7 el=" $2 " oc=1"}' \
@@ -372,7 +392,7 @@ IFACE_ENERGY_HIGH_PER_UNIT_AREA="$(echo ${IFACE_ENERGY_HIGH} ${IFACE_AREA} | awk
 
 {
 echo "input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode ligand_sasa ligand_volume"
-echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
+echo "$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE_PREFIX}${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
 } \
 | column -t \
 > "./final_result.txt"
