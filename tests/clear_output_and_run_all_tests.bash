@@ -22,6 +22,15 @@ do
     --scoring-mode ${SCORINGMODE}  \
     --output-details-dir "./output/${SCORINGMODE}_details_2" \
   > "./output/${SCORINGMODE}_global_scores_2.txt"
+  
+  ../voronikon \
+    --input-receptor ./input/receptor.pdb \
+    --input-ligand ./input/ligand.sdf \
+    --scoring-mode ${SCORINGMODE}  \
+    --repeat-random 15 \
+    --randomization-seed 42 \
+    --print-mode v \
+  > "./output/${SCORINGMODE}_global_scores_1_with_random_typing.txt"
 done
 
 find "./output/" -type f -name '*global_scores*' \
