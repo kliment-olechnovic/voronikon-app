@@ -27,10 +27,9 @@ do
     --input-receptor ./input/receptor.pdb \
     --input-ligand ./input/ligand.sdf \
     --scoring-mode ${SCORINGMODE}  \
-    --repeat-random 15 \
-    --randomization-seed 42 \
+    --estimate-tolerance \
     --print-mode v \
-  > "./output/${SCORINGMODE}_global_scores_1_with_random_typing.txt"
+  > "./output/${SCORINGMODE}_global_scores_1_with_estimated_tolearance.txt"
 
   ../voronikon \
     --input-complex ./input/complex.cif \

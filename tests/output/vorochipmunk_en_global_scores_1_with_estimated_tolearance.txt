@@ -12,8 +12,7 @@ per_unit_area_iface_energy_worst  -0.0385994
 scoring_mode                      vorochipmunk_en
 ligand_sasa                       895.386
 ligand_volume                     3000.84
-random_runs                       15
-mean_random_iface_energy          -2.39316066666667
-sd_random_iface_energy            15.2765949320257
-min_random_iface_energy           -22.3425
-max_random_iface_energy           39.4167
+mean_mutated_iface_energy         5.97617166666667
+sd_mutated_iface_energy           101.938045321292
+min_mutated_iface_energy          -119.986
+max_mutated_iface_energy          285.132

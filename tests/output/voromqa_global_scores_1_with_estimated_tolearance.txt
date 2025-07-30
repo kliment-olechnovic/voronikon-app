@@ -12,8 +12,7 @@ per_unit_area_iface_energy_worst  -0.542974
 scoring_mode                      voromqa
 ligand_sasa                       895.386
 ligand_volume                     3000.84
-random_runs                       15
-mean_random_iface_energy          -235.339533333333
-sd_random_iface_energy            37.6423042824857
-min_random_iface_energy           -293.066
-max_random_iface_energy           -169.536
+mean_mutated_iface_energy         -234.005591666667
+sd_mutated_iface_energy           294.138754599756
+min_mutated_iface_energy          -710.864
+max_mutated_iface_energy          395.324

@@ -15,10 +15,8 @@ Options:
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
     --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
-    --randomize-atom-types        string     flag to randomly assign ligand atom types, default is 'false'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
-    --repeat-random               number     number of times to run in random mode and output summary, default is '0'
-    --randomization-seed          number     number to use for seeding pseudorandom nuber generation, default is '0' for no seeding
+    --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
 
 Standard output:
@@ -62,10 +60,9 @@ OUTPUT_ID=""
 OUTPUT_TABLE_FILE="_stdout"
 OUTPUT_DETAILS_DIR=""
 SCORING_MODE="vorochipmunk"
-RANDOMIZEATOMTYPES="false"
-RANDOMIZATION_SEED="0"
 PRINT_MODE="h"
-REPEATRANDOM="0"
+TOLERANCE_ATOM_TYPE=""
+ESTIMATE_TOLERANCE="false"
 HELP_MODE="false"
 
 while [[ $# > 0 ]]
@@ -102,21 +99,16 @@ do
 		SCORING_MODE="$OPTARG"
 		shift
 		;;
-	--randomize-atom-types)
-		RANDOMIZEATOMTYPES="$OPTARG"
-		shift
-		;;
-	--randomization-seed)
-		RANDOMIZATION_SEED="$OPTARG"
-		shift
-		;;
 	--print-mode)
 		PRINT_MODE="$OPTARG"
 		shift
 		;;
-	--repeat-random)
-		REPEATRANDOM="$OPTARG"
+	--tolerance-atom-type)
+		TOLERANCE_ATOM_TYPE="$OPTARG"
 		shift
+		;;
+	--estimate-tolerance)
+		ESTIMATE_TOLERANCE="true"
 		;;
 	-h|--help)
 		HELP_MODE="true"
@@ -204,47 +196,46 @@ then
 	exit 0
 fi
 
-if [ "$REPEATRANDOM" -gt "0" ]
+if [ "$ESTIMATE_TOLERANCE" == "true" ]
 then
-	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --randomize-atom-types "false" \
-	> "${TMPLDIR}/nonrandomized_scores.txt"
+	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" \
+	> "${TMPLDIR}/nonmutated_scores.txt"
 	
-	if [ ! -s "${TMPLDIR}/nonrandomized_scores.txt" ]
+	if [ ! -s "${TMPLDIR}/nonmutated_scores.txt" ]
 	then
-		echo >&2 "Error: failed to run in non-randomized mode before running in randomized mode."
-		exit 1
+		echo >&2 "Error: failed to run in non-mutated mode before running in mutated mode."
+		exit 1f
 	fi
 	
-	for RANDOMITER in $(seq 1 ${REPEATRANDOM})
+	cat "${SCRIPTDIR}/tools/canonical_raw_types.txt" \
+	| egrep '^C|^N|^O' \
+	| while read -r MUTATION
 	do
-		SEEDVALUE="$(echo ${RANDOMIZATION_SEED} ${RANDOMITER} | awk '{print ($1*$2)}')"
 		${SCRIPTDIR}/voronikon \
 		  --input-receptor "$INPUT_RECEPTOR" \
 		  --input-ligand "$INPUT_LIGAND" \
 		  --scoring-mode "$SCORING_MODE" \
 		  --print-mode "h" \
-		  --randomize-atom-types "true" \
-		  --randomization-seed "${SEEDVALUE}"
+		  --tolerance-atom-type "$MUTATION"
 	done \
 	| awk '{if(NR==1 || $1!="input_receptor"){print $0}}' \
-	> "${TMPLDIR}/randomized_scores.txt"
+	> "${TMPLDIR}/mutated_scores.txt"
 	
-	if [ ! -s "${TMPLDIR}/randomized_scores.txt" ]
+	if [ ! -s "${TMPLDIR}/mutated_scores.txt" ]
 	then
-		echo >&2 "Error: failed to run in randomized mode."
+		echo >&2 "Error: failed to run in mutated mode."
 		exit 1
 	fi
 	
 	cd "$TMPLDIR"
 	
 R --vanilla << 'EOF' > /dev/null
-df0=read.table("nonrandomized_scores.txt", header=TRUE, stringsAsFactors=FALSE);
-df=read.table("randomized_scores.txt", header=TRUE, stringsAsFactors=FALSE);
-df0$random_runs=nrow(df);
-df0$mean_random_iface_energy=mean((df$iface_energy_worst+df$iface_energy_best)*0.5);
-df0$sd_random_iface_energy=sd((df$iface_energy_worst+df$iface_energy_best)*0.5);
-df0$min_random_iface_energy=min((df$iface_energy_worst+df$iface_energy_best)*0.5);
-df0$max_random_iface_energy=max((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0=read.table("nonmutated_scores.txt", header=TRUE, stringsAsFactors=FALSE);
+df=read.table("mutated_scores.txt", header=TRUE, stringsAsFactors=FALSE);
+df0$mean_mutated_iface_energy=mean((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0$sd_mutated_iface_energy=sd((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0$min_mutated_iface_energy=min((df$iface_energy_worst+df$iface_energy_best)*0.5);
+df0$max_mutated_iface_energy=max((df$iface_energy_worst+df$iface_energy_best)*0.5);
 write.table(df0, file="merged_scores.txt", row.names=FALSE, col.names=TRUE, quote=FALSE, sep=" ");
 EOF
 
@@ -252,7 +243,7 @@ EOF
 	
 	if [ ! -s "${TMPLDIR}/merged_scores.txt" ]
 	then
-		echo >&2 "Error: failed to summarize results of random runs."
+		echo >&2 "Error: failed to summarize results of multiple runs."
 		exit 1
 	fi
 	
@@ -302,32 +293,15 @@ cat ./ligand_table.txt \
 
 SCORING_MODE_PREFIX=""
 
-if [ "$RANDOMIZEATOMTYPES" == "true" ]
+if [ -n "$TOLERANCE_ATOM_TYPE" ]
 then
-	NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE="$(cat ./ligand_atom_types.txt | wc -l)"
+	cat ./ligand_atom_types.txt \
+	| awk -v newtype=${TOLERANCE_ATOM_TYPE} '{print $1 " " $2 " " newtype}' \
+	> ./changed_ligand_atom_types.txt
 	
-	for COPYREP in $(seq 1 ${NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE})
-	do
-		cat "${SCRIPTDIR}/tools/canonical_raw_types.txt" | egrep '^C|^N|^O'
-	done \
-	| {
-	if [ "$RANDOMIZATION_SEED" -gt "0" ]
-	then
-		awk -v seed=${RANDOMIZATION_SEED} 'BEGIN {srand(seed)} {print rand() "\t" $0}' | sort -k1,1n | awk '{print $2}'
-	else
-		shuf
-	fi
-	} \
-	| head -n "$NUM_OF_LIGANG_ATOMS_TO_RANDOMIZE" \
-	> ./pseudorandom_list_of_atom_types.txt
+	mv ./changed_ligand_atom_types.txt ./ligand_atom_types.txt
 	
-	paste ./ligand_atom_types.txt ./pseudorandom_list_of_atom_types.txt \
-	| awk '{print $1 " " $2 " " $4}' \
-	> ./random_ligand_atom_types.txt
-	
-	mv ./random_ligand_atom_types.txt ./ligand_atom_types.txt
-	
-	SCORING_MODE_PREFIX="random_"
+	SCORING_MODE_PREFIX="mutated_to_${TOLERANCE_ATOM_TYPE}_"
 fi
 
 cat ./ligand_table.txt \
