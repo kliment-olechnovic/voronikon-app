@@ -11,11 +11,11 @@ This repository provides an alpha version of VoroNikon app.
 
 ## Getting the latest version
 
-The currently recommended way to obtain VoroNikon is cloning the VoroNikon git repository [https://github.com/kliment-olechnovic/voronikon](https://github.com/kliment-olechnovic/voronikon):
+The currently recommended way to obtain VoroNikon is cloning the VoroNikon git repository [https://github.com/kliment-olechnovic/voronikon-app](https://github.com/kliment-olechnovic/voronikon-app):
 
 ```bash
-git clone https://github.com/kliment-olechnovic/voronikon.git
-cd ./voronikon
+git clone https://github.com/kliment-olechnovic/voronikon-app.git
+cd ./voronikon-app
 ```
 
 ## Setting up an environment for running VoroNikon
