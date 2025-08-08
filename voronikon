@@ -14,7 +14,7 @@ Options:
     --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
+    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
@@ -164,9 +164,9 @@ else
 	fi
 fi
 
-if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ]
+if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "sas_voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ]
 then
-	echo >&2 "Error: invalid scoring mode '$SCORING_MODE', must be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en'"
+	echo >&2 "Error: invalid scoring mode '$SCORING_MODE', must be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en'"
 	exit 1
 fi
 
@@ -305,7 +305,7 @@ then
 fi
 
 cat ./ligand_table.txt \
-| awk '{print "c<x>r<1>a<" NR ">R<LIG>A<" $2 NR "> " $3 " " $4 " " $5 " 1.7 el=" $2 " oc=1"}' \
+| awk '{print "c<XX>r<1>a<" NR ">R<LIG>A<" $2 NR "> " $3 " " $4 " " $5 " 1.7 el=" $2 " oc=1"}' \
 > ./ligand_atoms.pa
 
 NUM_OF_LIGAND_ATOMS="$(cat ./ligand_atoms.pa | wc -l)"
@@ -351,7 +351,7 @@ cat ./ligand_atom_types.txt
 | column -t \
 > ./custom_blanket_types_zero.txt
 
-read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="x"){print $5 " " $6}}')"
+read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
 
 if [ -z "$LIGAND_SASA" ] || [ -z "$LIGAND_VOLUME" ]
 then
@@ -363,17 +363,29 @@ if [ "$SCORING_MODE" == "voromqa" ]
 then
 	${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
 	  --input "./complex.cif" \
-	  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+	  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 	  --blanket \
 	  --blanket-types-file "./custom_blanket_types_zero.txt" \
 	  --output-ia-contacts-file "./contacts_ia.txt" \
 	  --output-ir-contacts-file "./contacts_ir.txt" \
 	> "./global_scores_zero.txt"
-else
+fi
+
+if [ "$SCORING_MODE" == "sas_voromqa" ]
+then
+	${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+	  "./complex.cif" \
+	  "./custom_blanket_types_zero.txt" \
+	  "[-a1 [-chain XX] -solvent]" \
+	> "./global_scores_zero.txt"
+fi
+
+if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
+then
 	${SCRIPTDIR}/tools/vorochipmunk-blanket \
 	  --akbps-layered-lib-weights "$SCORING_MODE" \
 	  --input "./complex.cif" \
-	  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+	  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 	  --blanket-types-file "./custom_blanket_types_zero.txt" \
 	> "./global_scores_zero.txt"
 fi
@@ -405,7 +417,7 @@ then
 	| tr '\n' ',' | sed 's/,$//' \
 	> ./list_of_non_canonical_atom_ids.txt
 	
-	CANONICALSELECTION="$(cat ./list_of_non_canonical_atom_ids.txt | head -1 | awk '{print "[-a1 [-chain x] -a2! [-chain x] -a1! [-aname " $1 "]]"}')"
+	CANONICALSELECTION="$(cat ./list_of_non_canonical_atom_ids.txt | head -1 | awk '{print "[-a1 [-chain XX] -a2! [-chain XX] -a1! [-aname " $1 "]]"}')"
 	
 	if [ "$SCORING_MODE" == "voromqa" ]
 	then
@@ -415,7 +427,19 @@ then
 		  --blanket \
 		  --blanket-types-file "./custom_blanket_types_zero.txt" \
 		> "./global_scores_canonical.txt"
-	else
+	fi
+	
+	if [ "$SCORING_MODE" == "sas_voromqa" ]
+	then
+		${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+		  "./complex.cif" \
+		  "./custom_blanket_types_zero.txt" \
+		  "$(cat ./list_of_non_canonical_atom_ids.txt | head -1 | awk '{print "[-a1 [-chain XX] -solvent -a1! [-aname " $1 "]]"}')" \
+		> "./global_scores_canonical.txt"
+	fi
+	
+	if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
+	then
 		${SCRIPTDIR}/tools/vorochipmunk-blanket \
 		  --akbps-layered-lib-weights "$SCORING_MODE" \
 		  --input "./complex.cif" \
@@ -447,15 +471,27 @@ then
 			then
 				${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
 				  --input "./complex.cif" \
-				  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+				  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 				  --blanket \
 				  --blanket-types-file "./custom_blanket_types_shifted.txt" \
 				> "./global_scores_shifted.txt"
-			else
+			fi
+			
+			if [ "$SCORING_MODE" == "sas_voromqa" ]
+			then
+				${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+				  "./complex.cif" \
+				  "./custom_blanket_types_shifted.txt" \
+				  "[-a1 [-chain XX] -solvent]" \
+				> "./global_scores_shifted.txt"
+			fi
+			
+			if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
+			then
 				${SCRIPTDIR}/tools/vorochipmunk-blanket \
 				  --akbps-layered-lib-weights "$SCORING_MODE" \
 				  --input "./complex.cif" \
-				  --subselect-contacts "[-a1 [-chain x] -a2! [-chain x]]" \
+				  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 				  --blanket-types-file "./custom_blanket_types_shifted.txt" \
 				> "./global_scores_shifted.txt"
 			fi

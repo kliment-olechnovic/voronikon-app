@@ -1,0 +1,69 @@
+#!/bin/bash
+
+export LANG=C
+export LC_ALL=C
+
+SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+INPUT="$1"
+BLANKET_TYPES_FILE="$2"
+SELECTION="$3"
+
+if [ -z "$INPUT" ]
+then
+	echo >&2 "Error: input file not provided"
+	exit 1
+fi
+
+if [ ! -s "$INPUT" ]
+then
+	echo >&2 "Error: input file '$INPUT' does not exist"
+	exit 1
+fi
+
+if [ -z "$BLANKET_TYPES_FILE" ]
+then
+	echo >&2 "Error: blanket types file not provided"
+	exit 1
+fi
+
+if [ ! -s "$BLANKET_TYPES_FILE" ]
+then
+	echo >&2 "Error: blanket types file '$INPUT' does not exist"
+	exit 1
+fi
+
+if [ -z "$SELECTION" ]
+then
+	echo >&2 "Error: selection not provided"
+	exit 1
+fi
+
+{
+cat << EOF
+var params={}
+params.infile='$INPUT';
+params.blanket_types_file='$BLANKET_TYPES_FILE';
+params.selection='$SELECTION';
+EOF
+
+cat << 'EOF'
+voronota_setup_defaults("-no-load-alt-voromqa-potential -faster-load-voromqa-potentials");
+voronota_setup_chemistry_annotating("-more-atom-types-file", params.blanket_types_file);
+voronota_assert_full_success("Failed to setup custom blanket atom types to calculate SAS mock energy");
+voronota_import("-file", params.infile);
+var import_result=voronota_last_output().results[0].output;
+voronota_assert_full_success("Failed to import file to calculate SAS mock energy");
+voronota_construct_contacts_radically_fast();
+voronota_mock_voromqa_local_contacts("-use", params.selection, "-adj-contact-energy", "MVE");
+voronota_assert_full_success("Failed to calculate SAS mock energy");
+var scoring_result=voronota_last_output().results[0].output;
+scoring_result.number_of_atoms=import_result.atoms_summary.number_total;
+scoring_result.pseudo_energy_norm=(scoring_result.pseudo_energy/scoring_result.area);
+var summary_table="input number_of_atoms sas_area sas_pseudo_energy sas_pseudo_energy_norm clash_score\n";
+summary_table+="params.infile "+scoring_result.number_of_atoms+" "+scoring_result.area+" "+scoring_result.pseudo_energy+" "+scoring_result.pseudo_energy_norm+" 0\n";
+fwrite("_stdout", summary_table);
+EOF
+} \
+| ${SCRIPTDIR}/voronota-js --no-setup-defaults
+
