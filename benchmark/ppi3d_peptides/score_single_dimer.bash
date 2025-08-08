@@ -20,7 +20,7 @@ fi
 
 FNAME="$(basename ${INPUT_RECEPTOR} __receptor.pdb)"
 
-for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa
+for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
 do
 	OUTFILE="./output/global_scores_${SCORINGMODE}/${FNAME}"
 	

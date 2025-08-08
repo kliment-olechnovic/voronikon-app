@@ -2,7 +2,7 @@
 
 cd "$(dirname $0)/output"
 
-for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa
+for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
 do
 
 R --vanilla --args "$SCORINGMODE" << 'EOF'

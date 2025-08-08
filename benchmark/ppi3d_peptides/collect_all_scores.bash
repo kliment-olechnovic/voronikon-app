@@ -2,7 +2,7 @@
 
 cd "$(dirname $0)"
 
-for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa
+for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
 do
 	find "./output/global_scores_${SCORINGMODE}/" -type f \
 	| sort \
