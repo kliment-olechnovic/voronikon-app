@@ -198,7 +198,7 @@ fi
 
 if [ "$ESTIMATE_TOLERANCE" == "true" ]
 then
-	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" \
+	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --output-id "$OUTPUT_ID" \
 	> "${TMPLDIR}/nonmutated_scores.txt"
 	
 	if [ ! -s "${TMPLDIR}/nonmutated_scores.txt" ]
