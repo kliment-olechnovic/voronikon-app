@@ -26,3 +26,32 @@ EOF
 
 done
 
+################################################################################
+
+R --vanilla << 'EOF'
+args=commandArgs(TRUE);
+scorename=args[1];
+df1=read.table("all_global_scores_table_voromqa.tsv", header=TRUE, stringsAsFactors=FALSE);
+df1=df1[which(df1$ligand_atoms<=250),];
+df2=read.table("all_global_scores_table_sas_voromqa.tsv", header=TRUE, stringsAsFactors=FALSE);
+df2=df2[which(df2$ligand_atoms<=250),];
+
+df=merge(df1, df2, by=c("input_receptor", "input_ligand"));
+df$ligand_atoms=df$ligand_atoms.x;
+df$iface_energy_worst=df$iface_energy_worst.x+df$iface_energy_worst.y;
+df$iface_area=df$iface_area.x+df$iface_area.y;
+
+png("plot_of_ligand_size_vs_interface_pseudo_energy_full_voromqa.png", width=960, height=480);
+par(mfrow=c(1, 2));
+
+coloring=densCols(df$ligand_atoms, df$iface_energy_worst);
+plot(df$ligand_atoms, df$iface_energy_worst, col=coloring, xlab="Ligand atoms", ylab="Interface pseudo-energy", main="Ligand atoms vs\ninterface pseudo-energy (voromqa+sas_voromqa)");
+abline(h=0);
+
+coloring=densCols(df$ligand_atoms, df$iface_energy_worst/df$iface_area);
+plot(df$ligand_atoms, df$iface_energy_worst/df$iface_area, col=coloring, xlab="Ligand atoms", ylab="Interface pseudo-energy per unit area", main="Ligand atoms vs interface\npseudo-energy per unit area (voromqa+sas_voromqa)");
+abline(h=0);
+
+dev.off();
+EOF
+
