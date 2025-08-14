@@ -308,7 +308,7 @@ then
 	readonly TMPLDIR=$(mktemp -d)
 	trap "rm -r $TMPLDIR" EXIT
 	
-	cat_stdin "$STDIN_FILE" | egrep . | sort | uniq > "$TMPLDIR/input_list"
+	cat_stdin "$STDIN_FILE" | grep -E . | sort | uniq > "$TMPLDIR/input_list"
 	
 	if [ ! -s "$TMPLDIR/input_list" ]
 	then
@@ -337,7 +337,7 @@ then
 		find $TMPLDIR/portions/ -type f -not -empty \
 		| awk -v outdir="$TMPLDIR/children_tables" '{print "--stdin-file " $1 " --output-table-file " outdir "/" NR ".txt"}' \
 		| xargs -L 1 sbatch -o "$TMPLDIR/slurm_logs/slurmjob-%j.out" -e "$TMPLDIR/slurm_logs/slurmjob-%j.err" $SBATCH_PARAMETERS "$ZEROARG" "${ALLARGS[@]}" --sbatch-parameters '' --processors 1 --input _list \
-		| egrep '^Submitted batch job ' \
+		| grep -E '^Submitted batch job ' \
 		| awk '{print $4}' \
 		> "$TMPLDIR/slurm_job_ids"
 		
@@ -406,7 +406,7 @@ EOF
 {
 if [ "$INFILE" == "_list" ]
 then
-	cat_stdin "$STDIN_FILE" | egrep . | sort | uniq
+	cat_stdin "$STDIN_FILE" | grep -E . | sort | uniq
 else
 	echo "$INFILE"
 fi

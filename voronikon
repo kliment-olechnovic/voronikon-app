@@ -208,7 +208,7 @@ then
 	fi
 	
 	cat "${SCRIPTDIR}/tools/canonical_raw_types.txt" \
-	| egrep '^C|^N|^O' \
+	| grep -E '^C|^N|^O' \
 	| while read -r MUTATION
 	do
 		${SCRIPTDIR}/voronikon \
@@ -281,9 +281,9 @@ then
 fi
 
 cat "./ligand.mol2" \
-| egrep '^@<TRIPOS>ATOM' -A 99999 \
-| egrep '^@<TRIPOS>BOND' -B 99999 \
-| egrep -v '^@' \
+| grep -E '^@<TRIPOS>ATOM' -A 99999 \
+| grep -E '^@<TRIPOS>BOND' -B 99999 \
+| grep -E -v '^@' \
 | awk '{if($2!="H"){print $0}}' \
 > ./ligand_table.txt
 
@@ -347,7 +347,7 @@ fi
 cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
 cat ./ligand_atom_types.txt
 } \
-| egrep '.' \
+| grep -E '.' \
 | column -t \
 > ./custom_blanket_types_zero.txt
 
@@ -463,7 +463,7 @@ then
 			cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
 			cat ./ligand_atom_types.txt | awk -v a=${UNKNOWNTYPE} -v b=${CANONICALTYPE} '{if($3==a){print $1 " " $2 " " b}else{print $0}}'
 			} \
-			| egrep '.' \
+			| grep -E '.' \
 			| column -t \
 			> "./custom_blanket_types_shifted.txt"
 			
