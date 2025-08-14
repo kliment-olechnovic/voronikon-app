@@ -38,7 +38,15 @@ or with two separate commands:
 Sadly, [Knodle](https://team.inria.fr/nano-d/software/knodle/) is closed-sourced, and the latest available version of Knodle only runs on Linux.
 Thus, the current version of VoroNikon will only run on Linux.
 
-VoroNikon does not require any setup apart from an optional rebuilding of 'voronota-js' and 'voronota-lt' binaries in the 'tools' subdirectory.
+For basic use cases (i.e. scoring protein-ligand interfaces with the receptor and the ligand provided in separate files) VoroNikon does not require any setup apart from an optional rebuilding of 'voronota-js' and 'voronota-lt' binaries in the 'tools' subdirectory.
+
+### Additional dependencies for some specific usecases
+
+For using the `--input-complex` option, VoroNikon needs the `obabel` tool that is a part of the "Open Babel" software package.
+
+For using the `--estimate-tolerance` option, VoroNikon needs "R".
+
+Both "Open Babel" and "R" can be easily installed from standard repositories in most Linux distributions.
 
 
 # Running the VoroNikon command-line tool
