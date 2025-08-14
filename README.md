@@ -59,12 +59,15 @@ The following is the help message output:
 for protein complexes with peptides that can contain non-canonical amino acid residues.
 
 Options:
-    --input-receptor              string  *  input file path for receptor, must be in PDB or mmCIF format
-    --input-ligand                string  *  input file path for ligand, must be in SDF format
+    --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
+    --input-ligand                string     input file path for ligand, must be in SDF format
+    --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
+    --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
+    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
+    --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
 
 Standard output:
@@ -79,6 +82,8 @@ Examples:
     voronikon --input-receptor './receptor.pdb" --input-ligand "./ligand.sdf" --output-table-file "./results.txt"
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
+    
+    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa" --output-id "test1"
 
 ```
 
