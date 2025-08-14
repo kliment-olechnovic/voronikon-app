@@ -186,5 +186,5 @@ Because of the current naive implementation of the exploration, VoroNikon may ru
 
 VoroNicon scores only protein-ligand interface area. An example of such interface area is shown in yellow in the picture below:
 
-![](./interface_visualization.png)
+![](./doc/interface_visualization.png)
 
