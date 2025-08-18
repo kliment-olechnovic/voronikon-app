@@ -11,10 +11,10 @@ Options:
     --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
     --input-ligand                string     input file path for ligand, must be in SDF format
     --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
+    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
@@ -63,6 +63,7 @@ SCORING_MODE="vorochipmunk"
 PRINT_MODE="h"
 TOLERANCE_ATOM_TYPE=""
 ESTIMATE_TOLERANCE="false"
+SKIP_SUPPLEMENTARY_DESCRIPTORS="false"
 HELP_MODE="false"
 
 while [[ $# > 0 ]]
@@ -109,6 +110,9 @@ do
 		;;
 	--estimate-tolerance)
 		ESTIMATE_TOLERANCE="true"
+		;;
+	--skip-supplementary-descriptors)
+		SKIP_SUPPLEMENTARY_DESCRIPTORS="true"
 		;;
 	-h|--help)
 		HELP_MODE="true"
@@ -351,12 +355,15 @@ cat ./ligand_atom_types.txt
 | column -t \
 > ./custom_blanket_types_zero.txt
 
-read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
-
-if [ -z "$LIGAND_SASA" ] || [ -z "$LIGAND_VOLUME" ]
+if [ "$SKIP_SUPPLEMENTARY_DESCRIPTORS" != "true" ] || [ "$SCORING_MODE" == "vorochipmunk" ]
 then
-	echo >&2 "Error: failed to calculate ligand volume and SASA"
-	exit 1
+	read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
+	
+	if [ -z "$LIGAND_SASA" ] || [ -z "$LIGAND_VOLUME" ]
+	then
+		echo >&2 "Error: failed to calculate ligand volume and SASA"
+		exit 1
+	fi
 fi
 
 if [ "$SCORING_MODE" == "voromqa" ]
@@ -545,18 +552,27 @@ NUM_OF_RECEPTOR_ATOMS="$(echo ${NUM_OF_ATOMS} ${NUM_OF_LIGAND_ATOMS} | awk '{pri
 
 IFACE_ENERGY_HIGH_PER_UNIT_AREA="$(echo ${IFACE_ENERGY_HIGH} ${IFACE_AREA} | awk '{print ($1/$2)}')"
 
-GLOBALPREFIX_HEADER="input_receptor input_ligand"
-GLOBALPREFIX_VALUE="$(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND})"
+GLOBALTABLE_HEADER=""
+GLOBALTABLE_VALUE=""
 
 if [ -n "$OUTPUT_ID" ]
 then
-	GLOBALPREFIX_HEADER="ID ${GLOBALPREFIX_HEADER}"
-	GLOBALPREFIX_VALUE="${OUTPUT_ID} ${GLOBALPREFIX_VALUE}"
+	GLOBALTABLE_HEADER="ID"
+	GLOBALTABLE_VALUE="${OUTPUT_ID}"
+fi
+
+GLOBALTABLE_HEADER="${GLOBALTABLE_HEADER} input_receptor input_ligand receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode"
+GLOBALTABLE_VALUE="${GLOBALTABLE_VALUE} $(basename ${INPUT_RECEPTOR}) $(basename ${INPUT_LIGAND}) ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE_PREFIX}${SCORING_MODE}"
+
+if [ -n "$LIGAND_SASA" ] && [ -n "$LIGAND_VOLUME" ]
+then
+	GLOBALTABLE_HEADER="${GLOBALTABLE_HEADER} ligand_sasa ligand_volume"
+	GLOBALTABLE_VALUE="${GLOBALTABLE_VALUE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
 fi
 
 {
-echo "${GLOBALPREFIX_HEADER} receptor_atoms ligand_atoms iface_area iface_energy_worst iface_energy_best iface_area_canonical iface_energy_canonical iface_clash_score per_unit_area_iface_energy_worst scoring_mode ligand_sasa ligand_volume"
-echo "${GLOBALPREFIX_VALUE} ${NUM_OF_RECEPTOR_ATOMS} ${NUM_OF_LIGAND_ATOMS} ${IFACE_AREA} ${IFACE_ENERGY_HIGH} ${IFACE_ENERGY_LOW} ${CANONICAL_IFACE_AREA} ${CANONICAL_IFACE_ENERGY} ${IFACE_CLASH_SCORE} ${IFACE_ENERGY_HIGH_PER_UNIT_AREA} ${SCORING_MODE_PREFIX}${SCORING_MODE} ${LIGAND_SASA} ${LIGAND_VOLUME}"
+echo "${GLOBALTABLE_HEADER}"
+echo "${GLOBALTABLE_VALUE}"
 } \
 | column -t \
 > "./final_result.txt"
