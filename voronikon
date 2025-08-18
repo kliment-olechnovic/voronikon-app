@@ -11,7 +11,7 @@ Options:
     --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
     --input-ligand                string     input file path for ligand, must be in SDF format
     --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
+    --scoring-mode                string     scoring mode in {'voromqa', 'sas_voromqa', 'vorochipmunk', 'vorochipmunk_en', 'all'}, default is 'vorochipmunk'
     --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
@@ -108,11 +108,12 @@ do
 		TOLERANCE_ATOM_TYPE="$OPTARG"
 		shift
 		;;
+	--skip-supplementary-descriptors)
+		SKIP_SUPPLEMENTARY_DESCRIPTORS="$OPTARG"
+		shift
+		;;
 	--estimate-tolerance)
 		ESTIMATE_TOLERANCE="true"
-		;;
-	--skip-supplementary-descriptors)
-		SKIP_SUPPLEMENTARY_DESCRIPTORS="true"
 		;;
 	-h|--help)
 		HELP_MODE="true"
@@ -168,7 +169,7 @@ else
 	fi
 fi
 
-if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "sas_voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ]
+if [ "$SCORING_MODE" != "voromqa" ] && [ "$SCORING_MODE" != "sas_voromqa" ] && [ "$SCORING_MODE" != "vorochipmunk" ] && [ "$SCORING_MODE" != "vorochipmunk_en" ] && [ "$SCORING_MODE" != "all" ]
 then
 	echo >&2 "Error: invalid scoring mode '$SCORING_MODE', must be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en'"
 	exit 1
@@ -200,9 +201,66 @@ then
 	exit 0
 fi
 
+if [ "$SCORING_MODE" == "all" ]
+then
+	for SUBMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
+	do
+		ADDITIONAL_FLAGS=""
+		if [ "$SUBMODE" != "sas_voromqa" ]
+		then
+			ADDITIONAL_FLAGS="--skip-supplementary-descriptors true"
+		fi
+		
+		${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --scoring-mode "$SUBMODE" ${ADDITIONAL_FLAGS} --print-mode v --output-table-file _stdout \
+		| grep -E -v '^scoring_mode\s' \
+		> "${TMPLDIR}/subresult"
+		
+		if [ ! -s "${TMPLDIR}/subresult" ]
+		then
+			echo >&2 "Error: failed to run in scoring mode '${SUBMODE}'."
+			exit 1
+		fi
+		
+		if [ "$SUBMODE" == "vorochipmunk" ]
+		then
+			cat "${TMPLDIR}/subresult" \
+			| grep -E '^ID\s|^input_receptor\s|^input_ligand\s|^receptor_atoms\s|^ligand_atoms\s|^iface_clash_score\s'
+		fi
+		
+		cat "${TMPLDIR}/subresult" \
+		| grep -E '^iface_area|^iface_energy|^per_unit_area_iface_|^mean_|^sd_|^min_|^max_' \
+		| sed "s|^|${SUBMODE}_|"
+		
+		cat "${TMPLDIR}/subresult" \
+		| grep -E '^ligand_sasa\s|ligand_volume\s'
+	done \
+	> "${TMPLDIR}/all_results_v"
+	
+	{
+		cat "${TMPLDIR}/all_results_v" | awk '{print $1}' | tr '\n' ' ' | sed 's/$/\n/'
+		cat "${TMPLDIR}/all_results_v" | awk '{print $2}' | tr '\n' ' ' | sed 's/$/\n/'
+	} \
+	> "${TMPLDIR}/all_results_h"
+	
+	if [ -n "$OUTPUT_TABLE_FILE" ] && [ "$OUTPUT_TABLE_FILE" != "_stdout" ]
+	then
+		mkdir -p "$(dirname "$OUTPUT_TABLE_FILE")"
+		cat "${TMPLDIR}/all_results_h" | column -t > "$OUTPUT_TABLE_FILE"
+	else
+		if [ "$PRINT_MODE" == "v" ]
+		then
+			cat "${TMPLDIR}/all_results_v" | column -t
+		else
+			cat "${TMPLDIR}/all_results_h" | column -t
+		fi
+	fi
+
+	exit 0
+fi
+
 if [ "$ESTIMATE_TOLERANCE" == "true" ]
 then
-	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --print-mode "h" --output-id "$OUTPUT_ID" \
+	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --skip-supplementary-descriptors "$SKIP_SUPPLEMENTARY_DESCRIPTORS" --print-mode "h" --output-id "$OUTPUT_ID" \
 	> "${TMPLDIR}/nonmutated_scores.txt"
 	
 	if [ ! -s "${TMPLDIR}/nonmutated_scores.txt" ]
@@ -220,7 +278,8 @@ then
 		  --input-ligand "$INPUT_LIGAND" \
 		  --scoring-mode "$SCORING_MODE" \
 		  --print-mode "h" \
-		  --tolerance-atom-type "$MUTATION"
+		  --tolerance-atom-type "$MUTATION" \
+		  --skip-supplementary-descriptors "true"
 	done \
 	| awk '{if(NR==1 || $1!="input_receptor"){print $0}}' \
 	> "${TMPLDIR}/mutated_scores.txt"
@@ -355,7 +414,7 @@ cat ./ligand_atom_types.txt
 | column -t \
 > ./custom_blanket_types_zero.txt
 
-if [ "$SKIP_SUPPLEMENTARY_DESCRIPTORS" != "true" ] || [ "$SCORING_MODE" == "vorochipmunk" ]
+if [ "$SKIP_SUPPLEMENTARY_DESCRIPTORS" == "false" ]
 then
 	read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
 	
