@@ -1,0 +1,4 @@
+noncanonical_atom  energy_shift_worst  energy_shift_best  replacement_atom_worst  replacement_atom_best
+Cl                 0                   0                  S.3                     C.2
+F                  0                   0                  S.3                     C.2
+I                  139.163             -116.605           S.3                     O.co2

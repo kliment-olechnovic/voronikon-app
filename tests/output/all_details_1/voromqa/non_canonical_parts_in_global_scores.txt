@@ -1,0 +1,4 @@
+noncanonical_atom  energy_shift_worst  energy_shift_best  replacement_atom_worst  replacement_atom_best
+Cl                 29.263              -53.57             N.3                     S.3
+F                  6.204               -10.546            N.3                     S.3
+I                  9.684               -66.289            N.3                     N.ar

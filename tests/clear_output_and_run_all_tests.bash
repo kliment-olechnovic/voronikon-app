@@ -7,7 +7,7 @@ cd "$SCRIPTDIR"
 rm -rf "./output"
 mkdir -p "./output"
 
-for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa
+for SCORINGMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa all
 do
   ../voronikon \
     --input-receptor ./input/receptor.pdb \

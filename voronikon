@@ -205,13 +205,19 @@ if [ "$SCORING_MODE" == "all" ]
 then
 	for SUBMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
 	do
-		ADDITIONAL_FLAGS=""
+		ADDITIONAL_OPTIONS=""
+		
 		if [ "$SUBMODE" != "sas_voromqa" ]
 		then
-			ADDITIONAL_FLAGS="--skip-supplementary-descriptors true"
+			ADDITIONAL_OPTIONS=" --skip-supplementary-descriptors true"
 		fi
 		
-		${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --scoring-mode "$SUBMODE" ${ADDITIONAL_FLAGS} --print-mode v --output-table-file _stdout \
+		if [ -n "$OUTPUT_DETAILS_DIR" ]
+		then
+			ADDITIONAL_OPTIONS="${ADDITIONAL_OPTIONS} --output-details-dir ${OUTPUT_DETAILS_DIR}/${SUBMODE}"
+		fi
+		
+		${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --scoring-mode "$SUBMODE" ${ADDITIONAL_OPTIONS} --print-mode v --output-table-file _stdout \
 		| grep -E -v '^scoring_mode\s' \
 		> "${TMPLDIR}/subresult"
 		
