@@ -47,6 +47,6 @@ then
 	echo "${ALTERED_FILES_COUNT} tests output files changed:"
 	git status -s ./output/
 else
-	echo "$No test output files changed."
+	echo "No test output files changed."
 fi
 
