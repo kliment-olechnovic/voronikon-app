@@ -38,13 +38,15 @@ do
   > "./output/${SCORINGMODE}_global_scores_1_from_complex.txt"
 done
 
-find "./output/" -type f -name '*global_scores*' \
-| grep -v "_details_" \
-| sort \
-| while read -r RESULTFILE
-do
-	echo "$RESULTFILE"
-	cat "$RESULTFILE" | sed 's/^/    /'
-	echo
-done
+echo "Comparing the computed test output with the checkpoint test output:"
+
+ALTERED_FILES_COUNT="$(git status -s ./output/ 2>&1 | wc -l)"
+
+if [ "$ALTERED_FILES_COUNT" -gt "0" ]
+then
+	echo "${ALTERED_FILES_COUNT} tests output files changed:"
+	git status -s ./output/
+else
+	echo "$No test output files changed."
+fi
 

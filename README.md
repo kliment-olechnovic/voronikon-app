@@ -70,10 +70,10 @@ Options:
     --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
     --input-ligand                string     input file path for ligand, must be in SDF format
     --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
+    --scoring-mode                string     scoring mode in {'vorochipmunk', 'voromqa', 'sas_voromqa', 'vorochipmunk_en', 'all'}, default is 'vorochipmunk'
     --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
-    --scoring-mode                string     scoring mode, can be 'voromqa' or 'sas_voromqa' or 'vorochipmunk' or 'vorochipmunk_en', default is 'vorochipmunk'
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
     --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
@@ -91,7 +91,7 @@ Examples:
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
     
-    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa" --output-id "test1"
+    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "all" --output-id "test1"
 
 ```
 
@@ -158,6 +158,55 @@ ligand_sasa                       895.386
 ligand_volume                     3000.84
 ```
 
+## In all scoring modes
+
+Running
+
+```bash
+./voronikon \
+  --scoring-mode all \
+  --input-receptor ./tests/input/receptor.pdb \
+  --input-ligand ./tests/input/ligand.sdf \
+  --print-mode v
+```
+
+gives output with scores calculated using 4 scoring modes ('vorochipmunk', 'voromqa', 'sas_voromqa', 'vorochipmunk_en'):
+
+```
+input_receptor                                    receptor.pdb
+input_ligand                                      ligand.sdf
+receptor_atoms                                    681
+ligand_atoms                                      119
+iface_clash_score                                 0
+scoring_mode                                      all
+vorochipmunk_iface_area                           749.571
+vorochipmunk_iface_energy_worst                   -13.8093
+vorochipmunk_iface_energy_best                    -31.4304
+vorochipmunk_iface_area_canonical                 629.014
+vorochipmunk_iface_energy_canonical               -27.0334
+vorochipmunk_per_unit_area_iface_energy_worst     -0.0184229
+voromqa_iface_area                                749.662
+voromqa_iface_energy_worst                        -407.047
+voromqa_iface_energy_best                         -582.603
+voromqa_iface_area_canonical                      629.189
+voromqa_iface_energy_canonical                    -452.198
+voromqa_per_unit_area_iface_energy_worst          -0.542974
+sas_voromqa_iface_area                            895.386
+sas_voromqa_iface_energy_worst                    174.605
+sas_voromqa_iface_energy_best                     -81.1634
+sas_voromqa_iface_area_canonical                  700.131
+sas_voromqa_iface_energy_canonical                35.4416
+sas_voromqa_per_unit_area_iface_energy_worst      0.195005
+vorochipmunk_en_iface_area                        749.571
+vorochipmunk_en_iface_energy_worst                -28.933
+vorochipmunk_en_iface_energy_best                 -56.4093
+vorochipmunk_en_iface_area_canonical              629.014
+vorochipmunk_en_iface_energy_canonical            -58.6594
+vorochipmunk_en_per_unit_area_iface_energy_worst  -0.0385994
+ligand_sasa                                       895.386
+ligand_volume                                     3000.84
+```
+
 # Interpreting VoroNikon scores
 
 Lower pseudo-energies are better.
@@ -172,7 +221,17 @@ the scores are the following:
 
 ![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_vorochipmunk.png)
 
+![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_vorochipmunk_en.png)
+
 ![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_voromqa.png)
+
+![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_sas_voromqa.png)
+
+## Note about 'voromqa' and 'sas_voromqa' scores
+
+For a single protein-ligand complex, 'voromqa' and 'sas_voromqa' can be summed. Below is the plot of the summed scores:
+
+![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_full_voromqa.png)
 
 # How it works
 

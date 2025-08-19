@@ -11,7 +11,7 @@ Options:
     --input-receptor              string     input file path for receptor, must be in PDB or mmCIF format
     --input-ligand                string     input file path for ligand, must be in SDF format
     --input-complex               string     input file path for receptor+ligand complex input, must be in PDB or mmCIF format
-    --scoring-mode                string     scoring mode in {'voromqa', 'sas_voromqa', 'vorochipmunk', 'vorochipmunk_en', 'all'}, default is 'vorochipmunk'
+    --scoring-mode                string     scoring mode in {'vorochipmunk', 'voromqa', 'sas_voromqa', 'vorochipmunk_en', 'all'}, default is 'vorochipmunk'
     --output-id                   string     string to use as the output ID, default is '' to not output any ID
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
@@ -32,7 +32,7 @@ Examples:
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
     
-    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "voromqa" --output-id "test1"
+    voronikon --input-complex "./complex.pdb" --print-mode v --scoring-mode "all" --output-id "test1"
 
 EOF
 exit 1
@@ -203,11 +203,11 @@ fi
 
 if [ "$SCORING_MODE" == "all" ]
 then
-	for SUBMODE in vorochipmunk vorochipmunk_en voromqa sas_voromqa
+	for SUBMODE in vorochipmunk voromqa sas_voromqa vorochipmunk_en
 	do
 		ADDITIONAL_OPTIONS=""
 		
-		if [ "$SUBMODE" != "sas_voromqa" ]
+		if [ "$SUBMODE" != "vorochipmunk_en" ]
 		then
 			ADDITIONAL_OPTIONS=" --skip-supplementary-descriptors true"
 		fi
@@ -231,6 +231,8 @@ then
 		then
 			cat "${TMPLDIR}/subresult" \
 			| grep -E '^ID\s|^input_receptor\s|^input_ligand\s|^receptor_atoms\s|^ligand_atoms\s|^iface_clash_score\s'
+			
+			echo "scoring_mode ${SCORING_MODE}"
 		fi
 		
 		cat "${TMPLDIR}/subresult" \
