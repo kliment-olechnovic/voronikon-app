@@ -233,6 +233,24 @@ For a single protein-ligand complex, 'voromqa' and 'sas_voromqa' can be summed. 
 
 ![](./benchmark/ppi3d_peptides/output/plot_of_ligand_size_vs_interface_pseudo_energy_full_voromqa.png)
 
+# Combining VoroNikon scores
+
+You cannot directly sum all the VoroNikon scores, even for the same single input complex.
+But if you have scores for multiple models, you can convert the score column vectors to z-scores (a.k.a [Standard scores](https://en.wikipedia.org/wiki/Standard_score)), for example:
+
+```
+voromqa_zscore = ( voromqa_iface_energy_worst - mean(voromqa_iface_energy_worst) ) / standard_deviation(voromqa_iface_energy_worst)
+```
+
+Then you can sum the z-scores using different weights, for example:
+
+```
+weighted_combined_zscore = 0.5*vorochipmunk_zscore + 0.5*vorochipmunk_en_zscore + 1.0*voromqa_zscore
+```
+
+And then use the weighted combined z-score for ranking.
+
+
 # How it works
 
 VoroNikon uses generalized typing of atoms provided by Knodle to score contact areas that are similar to contact areas in proteins.
