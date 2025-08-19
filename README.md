@@ -1,6 +1,6 @@
 # About VoroNikon
 
-VoroNikon is method to calculate area statistical pseudo-energy of interfaces for protein complexes
+VoroNikon is a method to calculate area statistical pseudo-energy of interfaces for protein complexes
 with peptides that can contain non-canonical amino acid residues.
 VoroNikon uses a knowledge-based statistical potential defined for Voronoi tessellation-based contact areas of protein-protein interfaces.
 There are two scoring modes - default one is based on the VoroChipmunk scoring method, another mode is based on the VoroMQA method.
@@ -35,7 +35,7 @@ or with two separate commands:
 ./tools/build-voronota-lt.bash
 ```
 
-Sadly, [Knodle](https://team.inria.fr/nano-d/software/knodle/) is closed-sourced, and the latest available version of Knodle only runs on Linux.
+Note: [Knodle](https://team.inria.fr/nano-d/software/knodle/) is closed-sourced, and the latest available version of Knodle only runs on Linux.
 Thus, the current version of VoroNikon will only run on Linux.
 
 For basic use cases (i.e. scoring protein-ligand interfaces with the receptor and the ligand provided in separate files) VoroNikon does not require any setup apart from an optional rebuilding of 'voronota-js' and 'voronota-lt' binaries in the 'tools' subdirectory.
@@ -75,7 +75,7 @@ Options:
     --output-table-file           string     output table file path, default is '_stdout' to print to stdout
     --output-details-dir          string     output directory path for details, default is '' to not output details
     --print-mode                  string     printing to stdout mode, can be 'h' or 'v', default is 'h'
-    --estimate-tolerance                     flag to stimate pocket tolerance to all ligand atom types 
+    --estimate-tolerance                     flag to estimate pocket tolerance to all ligand atom types 
     --help | -h                              flag to display help message and exit
 
 Standard output:
@@ -87,7 +87,7 @@ Examples:
     
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --print-mode v
     
-    voronikon --input-receptor './receptor.pdb" --input-ligand "./ligand.sdf" --output-table-file "./results.txt"
+    voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --output-table-file "./results.txt"
 
     voronikon --input-receptor "./receptor.pdb" --input-ligand "./ligand.sdf" --scoring-mode "voromqa"
     
@@ -213,7 +213,7 @@ Lower pseudo-energies are better.
 
 VoroChipmunk and VoroMQA modes output pseudo-energies on different scales, they cannot be directly summed.
 
-Right now VoroNikon can be used for ranking protein-peptide complexes, but interpreting the output scores in an absolute manner requires benchmarking.
+Currently VoroNikon can be used for ranking protein-peptide complexes, but interpreting the output scores in an absolute manner requires benchmarking.
 One way to benchmark is to score protein-peptide complexes from PDB.
 For 5159 non-redundant protein-peptide interfaces selected using [PPI3D clusters page](https://bioinformatics.lt/ppi3d/clusters)
 with the parameters listed [here](benchmark/ppi3d_peptides/input/ppi3d_9d29a2d46eaf6d2d59bd93bc1f4158e6.json),
@@ -261,7 +261,9 @@ When such atoms are present in the ligand, VoroNikon explores all possible atom 
 
 Because of the current naive implementation of the exploration, VoroNikon may run several times slower than the VoroChipmunk and VoroMQA methods - the speed will hopefully be improved in the future.
 
-VoroNicon scores only protein-ligand interface area. An example of such interface area is shown in yellow in the picture below:
+In the main scoring modes ('vorochipmunk', 'voromqa', 'vorochipmunk_en') VoroNicon scores only protein-ligand interface area.
+An example of such interface area is shown in yellow in the picture below.
+In the 'sas_voromqa' scoring mode VoroNicon scores only solvent-accessible surface area (cyan-colored surface in the picture below). 
 
 ![](./doc/interface_visualization.png)
 
