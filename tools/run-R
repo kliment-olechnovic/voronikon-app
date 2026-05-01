@@ -2,8 +2,9 @@
 
 set -euo pipefail
 
-CONDA_BIN="${HOME}/miniconda3/bin/conda"
+CONDA_ROOT="${HOME}/miniconda3"
 CONDA_ENV_NAME="extratools"
+CONDA_R="${CONDA_ROOT}/envs/${CONDA_ENV_NAME}/bin/R"
 
 if [ -t 0 ]
 then
@@ -13,14 +14,13 @@ fi
 
 if command -v R >/dev/null 2>&1
 then
-    exec R --vanilla --args "$@"
+	exec R --vanilla --slave --args "$@"
 else
-	if [ ! -x "$CONDA_BIN" ]
+	if [ ! -x "$CONDA_R" ]
 	then
-		echo >&2 "Error: R not found, and conda not executable at ${CONDA_BIN}"
+		echo >&2 "Error: R not found, and Conda env R not executable at ${CONDA_R}"
 		exit 1
 	fi
 	
-	exec "$CONDA_BIN" run -n "$CONDA_ENV_NAME" R --vanilla --args "$@"
+	exec "$CONDA_R" --vanilla --args "$@"
 fi
-
