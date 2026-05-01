@@ -5,6 +5,11 @@ export LC_ALL=C
 
 SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
+if [ -n "$VORONIKON_ROOT_DIR" ]
+then
+	SCRIPTDIR="${VORONIKON_ROOT_DIR}/tools"
+fi
+
 INPUT="$1"
 OUTPUT_RECEPTOR="$2"
 OUTPUT_LIGAND="$3"
@@ -87,7 +92,7 @@ obabel ligand.xyz -O ligand.sdf &> ./obabel.log
 
 if [ ! -s "ligand.sdf" ]
 then
-	echo >&2 "Error: failed to covert '${INPUT}' to SDF"
+	echo >&2 "Error: failed to convert '${INPUT}' to SDF"
 	exit 1
 fi
 

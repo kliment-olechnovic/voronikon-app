@@ -150,6 +150,8 @@ then
 	exit 1
 fi
 
+export VORONIKON_ROOT_DIR
+
 ################################################################################
 
 if [ -n "$INPUT_COMPLEX" ]
