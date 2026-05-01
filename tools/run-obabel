@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CONDA_OBABELOOT="${HOME}/miniconda3"
+CONDA_ENV_NAME="extratools"
+CONDA_OBABEL="${CONDA_OBABELOOT}/envs/${CONDA_ENV_NAME}/bin/obabel"
+
+if command -v obabel >/dev/null 2>&1
+then
+	exec obabel "$@"
+else
+	if [ ! -x "$CONDA_OBABEL" ]
+	then
+		echo >&2 "Error: obabel not found, and Conda env obabel not executable at ${CONDA_OBABEL}"
+		exit 1
+	fi
+	
+	exec "$CONDA_OBABEL" "$@"
+fi
