@@ -1,0 +1,36 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CONDA_BIN="${HOME}/miniconda3/bin/conda"
+CONDA_ENV_NAME="extratools"
+
+if [ "$#" -ne 3 ]
+then
+	echo >&2 "Error: not exactly three args provided, must be INPUT OUTPUT LOGFILE"
+	exit 1
+fi
+
+INPUT="$1"
+OUTPUT="$2"
+LOGFILE="$3"
+
+if [ ! -s "$INPUT" ]
+then
+	echo >&2 "Error: no input file ${INPUT}"
+	exit 1
+fi
+
+if command -v obabel >/dev/null 2>&1
+then
+	exec obabel "$INPUT" -O "$OUTPUT" &> "$LOGFILE"
+else
+	if [ ! -x "$CONDA_BIN" ]
+	then
+		echo >&2 "Error: obabel not found, and conda not executable at ${CONDA_BIN}"
+		exit 1
+	fi
+	
+	exec "$CONDA_BIN" run -n "$CONDA_ENV_NAME" obabel "$INPUT" -O "$OUTPUT" &> "$LOGFILE"
+fi
+
