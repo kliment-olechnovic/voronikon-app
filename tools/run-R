@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CONDA_BIN="${HOME}/miniconda3/bin/conda"
+CONDA_ENV_NAME="extratools"
+
+if [ -t 0 ]
+then
+	echo >&2 "Error: no R script provided on stdin"
+	exit 1
+fi
+
+if command -v R >/dev/null 2>&1
+then
+    exec R --vanilla --args "$@"
+else
+	if [ ! -x "$CONDA_BIN" ]
+	then
+		echo >&2 "Error: R not found, and conda not executable at ${CONDA_BIN}"
+		exit 1
+	fi
+	
+	exec "$CONDA_BIN" run -n "$CONDA_ENV_NAME" R --vanilla --args "$@"
+fi
+
