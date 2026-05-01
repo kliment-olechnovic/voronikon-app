@@ -14,7 +14,7 @@ fi
 
 if command -v R >/dev/null 2>&1
 then
-	exec R --vanilla --slave --args "$@"
+	exec R "$@"
 else
 	if [ ! -x "$CONDA_R" ]
 	then
@@ -22,5 +22,5 @@ else
 		exit 1
 	fi
 	
-	exec "$CONDA_R" --vanilla --args "$@"
+	exec "$CONDA_R" "$@"
 fi

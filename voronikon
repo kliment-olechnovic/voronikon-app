@@ -324,7 +324,7 @@ then
 	
 	cd "$TMPLDIR"
 	
-${VORONIKON_ROOT_DIR}/tools/run-R << 'EOF' > /dev/null
+${VORONIKON_ROOT_DIR}/tools/run-R --vanilla << 'EOF' > /dev/null
 df0=read.table("nonmutated_scores.txt", header=TRUE, stringsAsFactors=FALSE);
 df=read.table("mutated_scores.txt", header=TRUE, stringsAsFactors=FALSE);
 df0$mean_mutated_iface_energy=mean((df$iface_energy_worst+df$iface_energy_best)*0.5);
