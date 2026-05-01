@@ -88,7 +88,7 @@ cat ligand.pa | awk '{print $6 " " $2 " " $3 " " $4}' | sed 's/^el=//'
 } \
 > ligand.xyz
 
-${SCRIPTDIR}/run-obabel ligand.xyz -O ligand.sdf &> ./obabel.log
+obabel ligand.xyz -O ligand.sdf &> ./obabel.log
 
 if [ ! -s "ligand.sdf" ]
 then
