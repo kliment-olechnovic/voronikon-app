@@ -43,7 +43,7 @@ exit 1
 export LANG=C
 export LC_ALL=C
 
-SCRIPTDIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+VORONIKON_ROOT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 readonly ZEROARG=$0
 ALLARGS=("$@")
@@ -115,6 +115,10 @@ do
 	--estimate-tolerance)
 		ESTIMATE_TOLERANCE="true"
 		;;
+	--voronikon-root-dir)
+		VORONIKON_ROOT_DIR="$OPTARG"
+		shift
+		;;
 	-h|--help)
 		HELP_MODE="true"
 		;;
@@ -129,6 +133,26 @@ if [ "$HELP_MODE" == "true" ]
 then
 	print_help_and_exit
 fi
+
+################################################################################
+
+if [ ! -s "${VORONIKON_ROOT_DIR}/voronikon" ] || [ ! -s "${VORONIKON_ROOT_DIR}/tools/voronota-js" ]
+then
+	if [ -n "$SLURM_JOB_ID" ]
+	then
+		VORONIKON_ROOT_DIR="$(dirname -- "$(squeue -j ${SLURM_JOB_ID} -h -O Command)")"
+	fi
+fi
+
+if [ ! -s "${VORONIKON_ROOT_DIR}/voronikon" ] || [ ! -s "${VORONIKON_ROOT_DIR}/tools/voronota-js" ]
+then
+	echo >&2 "Error: cannot detect the VoroNikon software root directory, provide it with the --voronikon-root-dir option"
+	exit 1
+fi
+
+export VORONIKON_ROOT_DIR
+
+################################################################################
 
 if [ -n "$INPUT_COMPLEX" ]
 then
@@ -188,7 +212,7 @@ if [ -n "$INPUT_COMPLEX" ]
 then
 	NAMEPREFIX="$(basename ${INPUT_COMPLEX} .pdb)"
 	NAMEPREFIX="$(basename ${NAMEPREFIX} .cif)"
-	${SCRIPTDIR}/tools/split-complex-into-receptor-and-ligand "$INPUT_COMPLEX" "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
+	${VORONIKON_ROOT_DIR}/tools/split-complex-into-receptor-and-ligand "$INPUT_COMPLEX" "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
 	
 	if [ ! -s "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" ] || [ ! -s "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf" ]
 	then
@@ -196,7 +220,7 @@ then
 		exit 1
 	fi
 	
-	${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --input-complex "" --input-receptor "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" --input-ligand "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
+	${VORONIKON_ROOT_DIR}/voronikon "${ALLARGS[@]}" --input-complex "" --input-receptor "${TMPLDIR}/${NAMEPREFIX}_receptor.pdb" --input-ligand "${TMPLDIR}/${NAMEPREFIX}_ligand.sdf"
 	
 	exit 0
 fi
@@ -217,7 +241,7 @@ then
 			ADDITIONAL_OPTIONS="${ADDITIONAL_OPTIONS} --output-details-dir ${OUTPUT_DETAILS_DIR}/${SUBMODE}"
 		fi
 		
-		${SCRIPTDIR}/voronikon "${ALLARGS[@]}" --scoring-mode "$SUBMODE" ${ADDITIONAL_OPTIONS} --print-mode v --output-table-file _stdout \
+		${VORONIKON_ROOT_DIR}/voronikon "${ALLARGS[@]}" --scoring-mode "$SUBMODE" ${ADDITIONAL_OPTIONS} --print-mode v --output-table-file _stdout \
 		| grep -E -v '^scoring_mode\s' \
 		> "${TMPLDIR}/subresult"
 		
@@ -268,7 +292,7 @@ fi
 
 if [ "$ESTIMATE_TOLERANCE" == "true" ]
 then
-	${SCRIPTDIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --skip-supplementary-descriptors "$SKIP_SUPPLEMENTARY_DESCRIPTORS" --print-mode "h" --output-id "$OUTPUT_ID" \
+	${VORONIKON_ROOT_DIR}/voronikon --input-receptor "$INPUT_RECEPTOR" --input-ligand "$INPUT_LIGAND" --scoring-mode "$SCORING_MODE" --skip-supplementary-descriptors "$SKIP_SUPPLEMENTARY_DESCRIPTORS" --print-mode "h" --output-id "$OUTPUT_ID" \
 	> "${TMPLDIR}/nonmutated_scores.txt"
 	
 	if [ ! -s "${TMPLDIR}/nonmutated_scores.txt" ]
@@ -277,11 +301,11 @@ then
 		exit 1f
 	fi
 	
-	cat "${SCRIPTDIR}/tools/canonical_raw_types.txt" \
+	cat "${VORONIKON_ROOT_DIR}/tools/canonical_raw_types.txt" \
 	| grep -E '^C|^N|^O' \
 	| while read -r MUTATION
 	do
-		${SCRIPTDIR}/voronikon \
+		${VORONIKON_ROOT_DIR}/voronikon \
 		  --input-receptor "$INPUT_RECEPTOR" \
 		  --input-ligand "$INPUT_LIGAND" \
 		  --scoring-mode "$SCORING_MODE" \
@@ -343,7 +367,7 @@ cat "$INPUT_LIGAND" > "${TMPLDIR}/ligand.sdf"
 
 cd "$TMPLDIR"
 
-${SCRIPTDIR}/tools/Knodle --isdf ./ligand.sdf -o "./ligand.mol2"
+${VORONIKON_ROOT_DIR}/tools/Knodle --isdf ./ligand.sdf -o "./ligand.mol2"
 
 if [ ! -s "./ligand.mol2" ]
 then
@@ -388,7 +412,7 @@ voronota_import("-file", "ligand_atoms.pa");
 voronota_export_atoms_to_mmcif("-file", "ligand_atoms.cif");
 EOF
 } \
-| ${SCRIPTDIR}/tools/voronota-js --no-setup-defaults
+| ${VORONIKON_ROOT_DIR}/tools/voronota-js --no-setup-defaults
 
 if [ ! -s "./ligand_atoms.cif" ]
 then
@@ -406,7 +430,7 @@ voronota_pick_objects("-names", ["complex"]);
 voronota_export_atoms_to_mmcif("-file", "complex.cif");
 EOF
 } \
-| ${SCRIPTDIR}/tools/voronota-js --no-setup-defaults
+| ${VORONIKON_ROOT_DIR}/tools/voronota-js --no-setup-defaults
 
 if [ ! -s "./complex.cif" ]
 then
@@ -415,7 +439,7 @@ then
 fi
 
 {
-cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
+cat "${VORONIKON_ROOT_DIR}/tools/base_blanket_types.txt"
 cat ./ligand_atom_types.txt
 } \
 | grep -E '.' \
@@ -424,7 +448,7 @@ cat ./ligand_atom_types.txt
 
 if [ "$SKIP_SUPPLEMENTARY_DESCRIPTORS" == "false" ]
 then
-	read LIGAND_SASA LIGAND_VOLUME <<< "$(${SCRIPTDIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
+	read LIGAND_SASA LIGAND_VOLUME <<< "$(${VORONIKON_ROOT_DIR}/tools/voronota-lt --print-cells-chain-level --pdb-or-mmcif-heteroatoms --input './complex.cif' 2> /dev/null | awk '{if($1=="su" && $2=="XX"){print $5 " " $6}}')"
 	
 	if [ -z "$LIGAND_SASA" ] || [ -z "$LIGAND_VOLUME" ]
 	then
@@ -435,7 +459,7 @@ fi
 
 if [ "$SCORING_MODE" == "voromqa" ]
 then
-	${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+	${VORONIKON_ROOT_DIR}/tools/voronota-js-fast-iface-voromqa \
 	  --input "./complex.cif" \
 	  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 	  --blanket \
@@ -447,7 +471,7 @@ fi
 
 if [ "$SCORING_MODE" == "sas_voromqa" ]
 then
-	${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+	${VORONIKON_ROOT_DIR}/tools/score-sas-using-mock-voromqa \
 	  "./complex.cif" \
 	  "./custom_blanket_types_zero.txt" \
 	  "[-a1 [-chain XX] -solvent]" \
@@ -456,7 +480,7 @@ fi
 
 if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
 then
-	${SCRIPTDIR}/tools/vorochipmunk-blanket \
+	${VORONIKON_ROOT_DIR}/tools/vorochipmunk-blanket \
 	  --akbps-layered-lib-weights "$SCORING_MODE" \
 	  --input "./complex.cif" \
 	  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
@@ -474,8 +498,8 @@ read NUM_OF_ATOMS IFACE_AREA IFACE_ENERGY IFACE_CLASH_SCORE <<< "$(tail -1 ./glo
 
 {
 cat ./ligand_atom_types.txt | awk '{print $3}' | sort | uniq
-cat "${SCRIPTDIR}/tools/canonical_raw_types.txt"
-cat "${SCRIPTDIR}/tools/canonical_raw_types.txt"
+cat "${VORONIKON_ROOT_DIR}/tools/canonical_raw_types.txt"
+cat "${VORONIKON_ROOT_DIR}/tools/canonical_raw_types.txt"
 } \
 | sort | uniq -c | awk '{if($1<2){print $2}}' \
 > ./unmatched_ligand_atom_types.txt
@@ -495,7 +519,7 @@ then
 	
 	if [ "$SCORING_MODE" == "voromqa" ]
 	then
-		${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+		${VORONIKON_ROOT_DIR}/tools/voronota-js-fast-iface-voromqa \
 		  --input "./complex.cif" \
 		  --subselect-contacts "$CANONICALSELECTION" \
 		  --blanket \
@@ -505,7 +529,7 @@ then
 	
 	if [ "$SCORING_MODE" == "sas_voromqa" ]
 	then
-		${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+		${VORONIKON_ROOT_DIR}/tools/score-sas-using-mock-voromqa \
 		  "./complex.cif" \
 		  "./custom_blanket_types_zero.txt" \
 		  "$(cat ./list_of_non_canonical_atom_ids.txt | head -1 | awk '{print "[-a1 [-chain XX] -solvent -a1! [-aname " $1 "]]"}')" \
@@ -514,7 +538,7 @@ then
 	
 	if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
 	then
-		${SCRIPTDIR}/tools/vorochipmunk-blanket \
+		${VORONIKON_ROOT_DIR}/tools/vorochipmunk-blanket \
 		  --akbps-layered-lib-weights "$SCORING_MODE" \
 		  --input "./complex.cif" \
 		  --subselect-contacts "$CANONICALSELECTION" \
@@ -534,7 +558,7 @@ then
 		while read -r CANONICALTYPE
 		do
 			{
-			cat "${SCRIPTDIR}/tools/base_blanket_types.txt"
+			cat "${VORONIKON_ROOT_DIR}/tools/base_blanket_types.txt"
 			cat ./ligand_atom_types.txt | awk -v a=${UNKNOWNTYPE} -v b=${CANONICALTYPE} '{if($3==a){print $1 " " $2 " " b}else{print $0}}'
 			} \
 			| grep -E '.' \
@@ -543,7 +567,7 @@ then
 			
 			if [ "$SCORING_MODE" == "voromqa" ]
 			then
-				${SCRIPTDIR}/tools/voronota-js-fast-iface-voromqa \
+				${VORONIKON_ROOT_DIR}/tools/voronota-js-fast-iface-voromqa \
 				  --input "./complex.cif" \
 				  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
 				  --blanket \
@@ -553,7 +577,7 @@ then
 			
 			if [ "$SCORING_MODE" == "sas_voromqa" ]
 			then
-				${SCRIPTDIR}/tools/score-sas-using-mock-voromqa \
+				${VORONIKON_ROOT_DIR}/tools/score-sas-using-mock-voromqa \
 				  "./complex.cif" \
 				  "./custom_blanket_types_shifted.txt" \
 				  "[-a1 [-chain XX] -solvent]" \
@@ -562,7 +586,7 @@ then
 			
 			if [ "$SCORING_MODE" == "vorochipmunk" ] || [ "$SCORING_MODE" == "vorochipmunk_en" ]
 			then
-				${SCRIPTDIR}/tools/vorochipmunk-blanket \
+				${VORONIKON_ROOT_DIR}/tools/vorochipmunk-blanket \
 				  --akbps-layered-lib-weights "$SCORING_MODE" \
 				  --input "./complex.cif" \
 				  --subselect-contacts "[-a1 [-chain XX] -a2! [-chain XX]]" \
@@ -580,7 +604,7 @@ then
 			
 			echo "${UNKNOWNTYPE} ${CANONICALTYPE} ${IFACE_ENERGY_SHIFTED}"
 		done \
-		< "${SCRIPTDIR}/tools/canonical_raw_types.txt" \
+		< "${VORONIKON_ROOT_DIR}/tools/canonical_raw_types.txt" \
 		| sort -n -k3,3 \
 		> "./sorted_energies_for_shifted.txt"
 		
