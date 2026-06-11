@@ -58,8 +58,8 @@ fi
 
 cat << EOF
 voronota_delete_tags_of_atoms("-tags", "het");
-voronota_export_atoms("-use", "[-protein]", "-as-pdb", "-file", "receptor.pdb");
-voronota_export_atoms("-use", "(not ([-protein]))", "-file", "ligand.pa");
+voronota_export_atoms("-use", "(([-protein]) or ([-nucleic]))", "-as-pdb", "-file", "receptor.pdb");
+voronota_export_atoms("-use", "(not (([-protein]) or ([-nucleic])))", "-file", "ligand.pa");
 EOF
 } \
 | ${SCRIPTDIR}/voronota-js --no-setup-defaults
